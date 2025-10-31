@@ -390,11 +390,51 @@
       return audioCtx;
     }
 
-    // Initialize conversation audio
+    // Initialize conversation audio with safer loading (handles spaces/encoding and preloading)
     function initConversationAudio() {
       if (!conversationAudio) {
-        conversationAudio = new Audio('othermainaudio.mp3');
-        conversationAudio.loop = true;
+        try {
+          const fname = 'WhatsApp Audio 2025-10-31 at 22.34.51_4005dd8f.mp3';
+          const src = encodeURI(fname);
+          conversationAudio = new Audio();
+          conversationAudio.src = src;
+          conversationAudio.preload = 'auto';
+          conversationAudio.loop = true;
+          conversationAudio.volume = 0.6; // background level
+
+          // Attach basic error logging
+          conversationAudio.addEventListener('error', (ev) => {
+            console.warn('Conversation audio load error', ev);
+          });
+        } catch (e) {
+          console.warn('Could not initialize conversation audio:', e);
+        }
+      }
+    }
+
+    // Try to play an audio element safely, resuming audio context if required by the browser
+    async function safePlayAudio(audioEl) {
+      if (!audioEl) return;
+      try {
+        await audioEl.play();
+        return true;
+      } catch (err) {
+        // Autoplay blocked or other issue; try resuming audio context if available
+        try {
+          if (audioCtx && audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+        } catch (e) {
+          console.warn('Could not resume AudioContext:', e);
+        }
+        // Try again
+        try {
+          await audioEl.play();
+          return true;
+        } catch (e2) {
+          console.warn('Could not play audio after resume:', e2);
+          return false;
+        }
       }
     }
 
@@ -1452,7 +1492,7 @@
         await shareFakeCallToWhatsApp(contact, false);
       });
 
-      document.getElementById('acceptCall').addEventListener('click', () => {
+  document.getElementById('acceptCall').addEventListener('click', async () => {
         // Switch to conversation UI
         callStatus.textContent = 'Connected';
         document.getElementById('callStateLabel').textContent = 'Call in progress';
@@ -1460,10 +1500,12 @@
         document.getElementById('conversationUI').style.display = 'block';
         stopRingtone();
         
-        // Start playing conversation audio
+        // Start playing conversation audio (use safePlay to handle autoplay policies)
         initConversationAudio();
         conversationAudio.currentTime = 0;
-        conversationAudio.play().catch(e => console.warn('Could not play conversation audio:', e));
+        safePlayAudio(conversationAudio).then(ok => {
+          if (!ok) console.warn('Conversation audio failed to play');
+        });
 
         // Start call timer
         callStartTime = Date.now();
