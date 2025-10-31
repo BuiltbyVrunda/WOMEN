@@ -241,7 +241,10 @@
 
     <div class="card">
       <h2>📹 Camera & Recording</h2>
-      <button id="enableCamera" class="btn-success">Enable Camera</button>
+      <div style="display:flex; gap:10px;">
+        <button id="enableCamera" class="btn-success" style="flex:1">Enable Camera</button>
+        <button id="flipCamera" title="Flip camera" style="flex:1">Flip Camera</button>
+      </div>
       <video id="videoPreview" autoplay muted playsinline></video>
       <div class="recording-indicator" id="recordingIndicator">
         <div class="recording-dot"></div>
@@ -251,7 +254,17 @@
 
     <div class="card">
       <h2>📱 Motion Detection & SOS</h2>
-      <button id="sendSOS">Send SOS Manually</button>
+      <div style="display:flex; gap:10px; flex-direction:column;">
+        <button id="sosButton" style="background:#ff1a1a; padding:18px; font-size:18px;">🔴 EMERGENCY SOS</button>
+        <div style="display:flex; gap:10px;">
+          <button id="sendSOS" style="flex:1">Send SOS Manually</button>
+          <button id="voiceToggle" style="flex:1">🎙️ Voice: OFF</button>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button id="simulatePower" style="flex:1">Simulate Power Press</button>
+          <button id="smsAll" style="flex:1">Send SMS to Contacts</button>
+        </div>
+      </div>
       <div id="status">🔄 Initializing shake detection...</div>
     </div>
   </div>
@@ -273,20 +286,25 @@
     let recordingStartTime = null;
     let recordingTimer = null;
     let currentSosId = null;
+    let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 
     const videoPreview = document.getElementById("videoPreview");
     const recordingIndicator = document.getElementById("recordingIndicator");
     const recordingTime = document.getElementById("recordingTime");
 
-    async function enableCamera() {
+    async function enableCamera(facing = currentFacingMode) {
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: true
         });
         videoPreview.srcObject = mediaStream;
         videoPreview.style.display = "block";
         console.log("✅ Camera enabled");
+        // update current facing mode
+        currentFacingMode = facing;
+        // enable or disable flip button depending on track capabilities
+        try { document.getElementById('flipCamera').disabled = isRecording; } catch(e) {}
         return true;
       } catch (err) {
         console.error("❌ Camera access denied:", err);
@@ -306,7 +324,7 @@
         recordedChunks = [];
         currentSosId = sosId;
         
-        let options = { mimeType: 'video/webm;codecs=vp9,opus', videoBitsPerSecond: 2500000 };
+  let options = { mimeType: 'video/webm;codecs=vp8,opus', videoBitsPerSecond: 2500000 };
         if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = 'video/webm';
         if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = 'video/mp4';
 
@@ -320,6 +338,8 @@
         isRecording = true;
         recordingStartTime = Date.now();
         recordingIndicator.classList.add("active");
+  // disable flip while recording to avoid complex stream switching mid-record
+  try { document.getElementById('flipCamera').disabled = true; } catch(e) {}
         startRecordingTimer();
 
         console.log("📹 Recording started");
@@ -336,6 +356,7 @@
         mediaRecorder.stop();
         isRecording = false;
         recordingIndicator.classList.remove("active");
+        try { document.getElementById('flipCamera').disabled = false; } catch(e) {}
         stopRecordingTimer();
         console.log("⏹️ Recording stopped");
         return true;
@@ -369,13 +390,39 @@
         formData.append("location", JSON.stringify(location));
         formData.append("duration", `${duration}s`);
 
-        const response = await fetch("http://localhost:3000/upload-recording", {
-          method: "POST",
-          body: formData
-        });
-        const result = await response.json();
-        console.log("✅ Recording uploaded:", result);
-        alert(`📹 Recording uploaded successfully!\nDuration: ${duration}s`);
+        // Trigger local download of the recorded video
+        try {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `sos-recording-${Date.now()}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 1000);
+        } catch (err) {
+          console.warn('⚠️ Auto-download failed:', err);
+        }
+
+        // Upload to server (optional)
+        try {
+          const response = await fetch("http://localhost:3000/upload-recording", {
+            method: "POST",
+            body: formData
+          });
+          const result = await response.json();
+          console.log("✅ Recording uploaded:", result);
+          alert(`📹 Recording saved locally and uploaded successfully!\nDuration: ${duration}s`);
+          // return upload result so caller can lock the evidence
+          return result;
+        } catch (err) {
+          console.warn('⚠️ Upload failed (server may be offline):', err);
+          alert(`📹 Recording saved locally. (Upload failed or server unavailable)\nDuration: ${duration}s`);
+          return null;
+        }
       } catch (err) {
         console.error("❌ Failed to upload recording:", err);
       }
@@ -537,6 +584,7 @@
         return;
       }
 
+      // This version allows passing a shake intensity via an argument.
       const modal = document.getElementById("countdownModal");
       const numberEl = document.getElementById("countdownNumber");
       let count = SOS_SETTINGS.countdownDuration;
@@ -549,8 +597,10 @@
         numberEl.textContent = count;
         if (count <= 0) {
           clearInterval(countdownTimer);
+          countdownTimer = null;
           modal.classList.remove("active");
-          sendWhatsAppSOS(null);
+          // call the full SOS orchestrator with the last recorded shakeIntensity (if any)
+          startFullSOSFlow(shakeIntensity, { autoDial: false });
         }
       }, 1000);
     }
@@ -562,6 +612,11 @@
       }
       document.getElementById("countdownModal").classList.remove("active");
       document.getElementById("status").textContent = "✅ SOS cancelled. Motion sensors still active.";
+      // stop any auto-recording that may have started due to the shake
+      if (isRecording) {
+        stopRecording();
+        recordedChunks = [];
+      }
     }
 
     async function sendWhatsAppSOS(shakeIntensity = null) {
@@ -662,7 +717,7 @@
     }
 
     function initShakeDetection() {
-      window.addEventListener("devicemotion", event => {
+      window.addEventListener("devicemotion", async event => {
         const { x, y, z } = event.accelerationIncludingGravity;
         const totalAcceleration = Math.sqrt(x * x + y * y + z * z);
 
@@ -676,12 +731,211 @@
             lastShakeTime = now;
             shakeIntensity = totalAcceleration;
             console.log("🚨 Shake detected! Intensity:", totalAcceleration.toFixed(2));
-            statusEl.textContent = "🚨 Shake detected! Sending SOS...";
-            sendWhatsAppSOS(shakeIntensity);
+            statusEl.textContent = "🚨 Shake detected! Opening camera and recording...";
+            // open camera immediately and start recording
+            try {
+              const sosId = Date.now();
+              await enableCamera();
+              await startRecording(sosId);
+              // start the 3s countdown before sending the WhatsApp SOS
+              startSOSCountdown();
+            } catch (err) {
+              console.error('Error handling shake flow:', err);
+            }
           }
         }
       });
       statusEl.textContent = "✅ Motion sensors active. Shake to trigger SOS.";
+    }
+
+    // Flip/switch camera (front/back). Disallowed while recording to keep things simple.
+    async function flipCamera() {
+      if (isRecording) {
+        alert("⚠️ Cannot flip camera while recording. Stop recording first.");
+        return;
+      }
+      currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+      try {
+        if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      } catch (e) { /* ignore */ }
+      await enableCamera(currentFacingMode);
+    }
+
+    // ========== Alarm, Torch and Live Location ==========
+    let alarmContext = null;
+    let alarmGain = null;
+    function startAlarm() {
+      try {
+        if (!alarmContext) {
+          alarmContext = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = alarmContext.createOscillator();
+          alarmGain = alarmContext.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.value = 1000;
+          alarmGain.gain.value = 0.0005; // start low
+          osc.connect(alarmGain);
+          alarmGain.connect(alarmContext.destination);
+          osc.start();
+          // ramp up quickly
+          alarmGain.gain.exponentialRampToValueAtTime(0.5, alarmContext.currentTime + 0.5);
+          alarmContext._osc = osc;
+        }
+      } catch (err) {
+        console.warn('Alarm not supported:', err);
+      }
+    }
+
+    function stopAlarm() {
+      try {
+        if (alarmContext) {
+          try { alarmContext._osc.stop(); } catch (e) {}
+          alarmContext.close();
+        }
+      } catch (e) {}
+      alarmContext = null;
+      alarmGain = null;
+    }
+
+    let strobeInterval = null;
+    async function startStrobeTorch() {
+      try {
+        if (!mediaStream) await enableCamera();
+        const videoTrack = mediaStream.getVideoTracks()[0];
+        const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (!caps.torch) return;
+        strobeInterval = setInterval(async () => {
+          try {
+            await videoTrack.applyConstraints({ advanced: [{ torch: true }] });
+            setTimeout(async () => {
+              try { await videoTrack.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) {}
+            }, 200);
+          } catch (e) {}
+        }, 400);
+      } catch (e) {
+        console.warn('Strobe not available:', e);
+      }
+    }
+
+    function stopStrobeTorch() {
+      if (strobeInterval) {
+        clearInterval(strobeInterval);
+        strobeInterval = null;
+      }
+      try {
+        if (mediaStream) {
+          const t = mediaStream.getVideoTracks()[0];
+          if (t && t.applyConstraints) t.applyConstraints({ advanced: [{ torch: false }] });
+        }
+      } catch (e) {}
+    }
+
+    // Live location watch
+    let liveWatchId = null;
+    function startLiveLocationWatch(sosId) {
+      if (!('geolocation' in navigator)) return;
+      try {
+        liveWatchId = navigator.geolocation.watchPosition(async (pos) => {
+          const payload = {
+            sosId: sosId || null,
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            timestamp: new Date().toISOString()
+          };
+          try { await fetch('http://localhost:3000/sos-live',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}); } catch(e){}
+        }, (err) => {}, { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 });
+      } catch (e) {}
+    }
+
+    function stopLiveLocationWatch() {
+      try { if (liveWatchId !== null) navigator.geolocation.clearWatch(liveWatchId); } catch (e) {}
+      liveWatchId = null;
+    }
+
+    // ========== Orchestrator: full SOS flow ==========
+    async function startFullSOSFlow(shakeIntensity = null, options = {}) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = '🚨 Executing SOS flow...';
+      const sosId = Date.now();
+
+      try {
+        // Start camera and recording immediately (audio+video)
+        await enableCamera();
+        await startRecording(sosId);
+
+        // Start live location updates to server
+        startLiveLocationWatch(sosId);
+
+        // Play alarm and strobe
+        startAlarm();
+        startStrobeTorch();
+
+        // Send WhatsApp + SMS + optional dial via existing sendWhatsAppSOS
+        try { await sendWhatsAppSOS(shakeIntensity); } catch(e) { console.warn(e); }
+
+        // Send SMS via sms: links (opens native SMS app for user confirmation)
+        try {
+          const smsText = encodeURIComponent(`EMERGENCY! My location: https://www.google.com/maps?q=Unknown`);
+          contacts.forEach((c) => {
+            const phone = c.phone.replace(/[^0-9]/g, '');
+            const smsUrl = `sms:${phone}?body=${smsText}`;
+            window.open(smsUrl, '_blank');
+          });
+        } catch (e) {}
+
+        // Optionally auto-dial (opens phone dialer)
+        if (options.autoDial && contacts[0]) {
+          try { window.open(`tel:${contacts[0].phone.replace(/[^0-9]/g,'')}`,'_self'); } catch(e){}
+        }
+
+        // Within 30 seconds: alert police and broadcast (best-effort logging on server)
+        setTimeout(async () => {
+          try {
+            await fetch('http://localhost:3000/alert-police', {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ sosId, location: 'unknown', details: { via: 'web-app' } })
+            });
+          } catch (e) {}
+          try {
+            await fetch('http://localhost:3000/broadcast', {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ sosId, location: 'unknown', message: 'SOS Broadcast' })
+            });
+          } catch (e) {}
+        }, 30000);
+
+        // When recording stops and upload completes, server will store file; attempt to lock it
+        // uploadRecording() returns the server response (or null)
+        const uploadResult = await new Promise((resolve) => {
+          // poll for recording stop and upload result
+          const check = setInterval(async () => {
+            if (!isRecording && recordedChunks.length === 0) {
+              clearInterval(check);
+              resolve(null);
+            }
+            // If upload has occurred, uploadRecording would have returned result earlier
+            // We instead rely on stopRecording -> uploadRecording -> return result
+          }, 500);
+          // Failsafe: resolve after configured recordingDuration + 5s
+          setTimeout(() => { clearInterval(check); resolve(null); }, SOS_SETTINGS.recordingDuration + 5000);
+        });
+
+        if (uploadResult && uploadResult.fileUrl) {
+          try {
+            await fetch('http://localhost:3000/lock-recording', {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ filename: uploadResult.recordingData?.filename || null, sosId })
+            });
+          } catch (e) { console.warn('Lock request failed', e); }
+        }
+
+        statusEl.textContent = '✅ SOS flow executed. Help is on the way.';
+      } catch (err) {
+        console.error('Error in SOS flow:', err);
+        statusEl.textContent = '❌ SOS flow failed. See console for details.';
+      } finally {
+        // stop alarm & strobe after a while
+        setTimeout(() => { stopAlarm(); stopStrobeTorch(); stopLiveLocationWatch(); }, 35000);
+      }
     }
 
     async function logShakeIntensity(intensity, x, y, z) {
@@ -713,6 +967,60 @@
       document.getElementById("saveProfile").addEventListener("click", window.saveProfile);
       document.getElementById("cancelSOS").addEventListener("click", cancelCountdown);
       document.getElementById("sendSOS").addEventListener("click", startSOSCountdown);
+      document.getElementById("flipCamera").addEventListener("click", async () => await flipCamera());
+      // new controls
+      document.getElementById('sosButton').addEventListener('click', async () => {
+        // immediate open camera + recording + 3s countdown
+        try { await enableCamera(); await startRecording(Date.now()); startSOSCountdown(); } catch(e) { console.error(e); }
+      });
+
+      // voice command (GRINGOTTS HELP)
+      let recognition = null;
+      let listening = false;
+      const voiceToggle = document.getElementById('voiceToggle');
+      if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRec();
+        recognition.lang = 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.onresult = (ev) => {
+          for (let i=ev.resultIndex;i<ev.results.length;i++){
+            const t = ev.results[i][0].transcript.trim().toLowerCase();
+            if (t.includes('gringotts help')) {
+              console.log('Voice trigger detected:', t);
+              // mirror shake behavior
+              (async ()=>{ try{ await enableCamera(); await startRecording(Date.now()); startSOSCountdown(); }catch(e){console.error(e);} })();
+            }
+          }
+        };
+        recognition.onerror = (e) => console.warn('Recognition error', e);
+      }
+      voiceToggle.addEventListener('click', () => {
+        if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
+        if (!listening) { recognition.start(); listening = true; voiceToggle.textContent = '🎙️ Voice: ON'; }
+        else { recognition.stop(); listening = false; voiceToggle.textContent = '🎙️ Voice: OFF'; }
+      });
+
+      // simulate power button presses (5 rapid presses)
+      let powerPressCount = 0;
+      let powerPressTimer = null;
+      document.getElementById('simulatePower').addEventListener('click', () => {
+        powerPressCount++;
+        if (powerPressTimer) clearTimeout(powerPressTimer);
+        powerPressTimer = setTimeout(() => { powerPressCount = 0; }, 3000);
+        if (powerPressCount >= 5) {
+          powerPressCount = 0; clearTimeout(powerPressTimer);
+          // trigger SOS flow
+          (async ()=>{ try{ await enableCamera(); await startRecording(Date.now()); startSOSCountdown(); }catch(e){console.error(e);} })();
+        }
+      });
+
+      // send SMS to all contacts (opens native SMS composer per contact)
+      document.getElementById('smsAll').addEventListener('click', () => {
+        const smsBody = encodeURIComponent('🚨 EMERGENCY! Please respond.');
+        contacts.forEach(c => { const phone = c.phone.replace(/[^0-9]/g,''); window.open(`sms:${phone}?body=${smsBody}`,'_blank'); });
+      });
       document.getElementById("contactPhone").addEventListener("keypress", (e) => {
         if (e.key === "Enter") window.addContact();
       });

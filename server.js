@@ -44,6 +44,8 @@ app.use("/uploads", express.static(uploadsDir));
 const sosFile = path.join(logsDir, "sos_log.json");
 const shakeIntensityFile = path.join(logsDir, "shake_intensity_log.json");
 const recordingsFile = path.join(logsDir, "recordings_log.json");
+const liveLocationsFile = path.join(logsDir, "live_locations_log.json");
+const alertsFile = path.join(logsDir, "alerts_log.json");
 
 // Helper function to save data to JSON file
 function saveData(filename, data) {
@@ -79,6 +81,67 @@ app.post("/shake-intensity", (req, res) => {
 
   saveShakeIntensity(shakeIntensityFile, shakeData);
   res.json({ status: "Shake intensity logged successfully" });
+});
+
+// Endpoint to receive live location updates for an SOS
+app.post("/sos-live", (req, res) => {
+  const { sosId, latitude, longitude, timestamp } = req.body;
+  const entry = {
+    sosId: sosId || null,
+    latitude: latitude || "Unknown",
+    longitude: longitude || "Unknown",
+    timestamp: timestamp || new Date().toISOString()
+  };
+  saveData(liveLocationsFile, entry);
+  res.json({ status: 'Live location logged' });
+});
+
+// Endpoint to receive police alert requests
+app.post("/alert-police", (req, res) => {
+  const { sosId, location, details } = req.body;
+  const entry = {
+    sosId: sosId || null,
+    location: location || {},
+    details: details || {},
+    timestamp: new Date().toISOString()
+  };
+  saveData(alertsFile, entry);
+  console.log('🚓 Police alert logged', entry);
+  res.json({ status: 'Police alert received' });
+});
+
+// Endpoint to broadcast to nearby users (placeholder logger)
+app.post("/broadcast", (req, res) => {
+  const { sosId, location, message } = req.body;
+  const entry = {
+    sosId: sosId || null,
+    location: location || {},
+    message: message || '',
+    timestamp: new Date().toISOString()
+  };
+  saveData(alertsFile, entry);
+  console.log('📣 Broadcast logged', entry);
+  res.json({ status: 'Broadcast received' });
+});
+
+// Endpoint to mark a recording as locked (prevent deletion from logs)
+app.post("/lock-recording", (req, res) => {
+  const { filename, sosId } = req.body || {};
+  if (!fs.existsSync(recordingsFile)) return res.status(404).json({ error: 'No recordings log' });
+  const recordings = JSON.parse(fs.readFileSync(recordingsFile, 'utf8'));
+  let updated = false;
+  for (let r of recordings) {
+    if ((filename && r.filename === filename) || (sosId && r.sosId == sosId)) {
+      r.locked = true;
+      updated = true;
+    }
+  }
+  if (updated) {
+    fs.writeFileSync(recordingsFile, JSON.stringify(recordings, null, 2));
+    res.json({ status: 'Recording(s) locked' });
+  } else {
+    res.status(404).json({ error: 'Recording not found' });
+  }
 });
 
 // Endpoint to receive SOS alerts
