@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emergency SOS + Recording System</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      color: #ff6b6b;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    h2 {
+      margin-bottom: 15px;
+      font-size: 20px;
+    }
+    button {
+      width: 100%;
+      background: #ff4d4d;
+      color: white;
+      border: none;
+      padding: 15px 24px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      transition: all 0.3s ease;
+    }
+    button:hover {
+      background: #ff1a1a;
+      transform: translateY(-2px);
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-success {
+      background: #51cf66;
+    }
+    .btn-success:hover {
+      background: #37b24d;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 14px;
+      margin-bottom: 10px;
+      font-family: inherit;
+    }
+    input::placeholder, textarea::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    #status, .profile-status {
+      text-align: center;
+      padding: 15px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .profile-status {
+      margin-top: 12px;
+    }
+    .contacts-list {
+      margin-top: 15px;
+    }
+    .contact-item {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .contact-info {
+      flex: 1;
+    }
+    .contact-name {
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .contact-phone {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .btn-remove {
+      background: #ff6b6b;
+      padding: 8px 15px;
+      font-size: 13px;
+      width: auto;
+      margin: 0;
+    }
+    #videoPreview {
+      width: 100%;
+      border-radius: 10px;
+      margin-top: 15px;
+      display: none;
+      max-height: 300px;
+      object-fit: cover;
+    }
+    .recording-indicator {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      background: rgba(255, 0, 0, 0.2);
+      border-radius: 8px;
+      margin-top: 10px;
+      animation: pulse 1.5s infinite;
+    }
+    .recording-indicator.active {
+      display: flex;
+    }
+    .recording-dot {
+      width: 12px;
+      height: 12px;
+      background: #ff0000;
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.3; }
+    }
+    .countdown-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .countdown-modal.active {
+      display: flex;
+    }
+    .countdown-content {
+      text-align: center;
+      padding: 60px 50px;
+      background: linear-gradient(135deg, #ff0000 0%, #ff5252 100%);
+      border-radius: 30px;
+      max-width: 400px;
+      width: 90%;
+      animation: pulse 0.8s infinite;
+      box-shadow: 0 0 100px rgba(255, 0, 0, 0.8);
+    }
+    .countdown-number {
+      font-size: 180px;
+      font-weight: 900;
+      line-height: 1;
+      margin: 30px 0;
+      text-shadow: 0 0 40px rgba(255, 255, 255, 0.8);
+      animation: numberPulse 1s infinite;
+    }
+    .countdown-text {
+      font-size: 28px;
+      margin-bottom: 40px;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+    .btn-cancel {
+      background: white;
+      color: #ff0000;
+      font-size: 22px;
+      padding: 25px 50px;
+      font-weight: 900;
+      border-radius: 15px;
+      text-transform: uppercase;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+    @keyframes numberPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.9; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚨 Emergency SOS + Recording System</h1>
+    
+    <div class="card">
+      <h2>👤 My Profile</h2>
+      <input type="text" id="userName" placeholder="Your Full Name*">
+      <input type="text" id="userBloodType" placeholder="Blood Type (Optional)">
+      <textarea id="userMedicalInfo" placeholder="Medical conditions, allergies... (Optional)"></textarea>
+      <textarea id="userEmergencyNote" placeholder="Emergency note for responders (Optional)"></textarea>
+      <button id="saveProfile" class="btn-success">Save Profile</button>
+      <div class="profile-status" id="profileStatus">⚠️ Profile not configured</div>
+    </div>
+
+    <div class="card">
+      <h2>📞 Emergency Contacts</h2>
+      <input type="text" id="contactName" placeholder="Contact Name (e.g., Mom, Dad)">
+      <input type="tel" id="contactPhone" placeholder="Phone Number (+919876543210)">
+      <button id="addContact" class="btn-success">Add Emergency Contact</button>
+      <div class="contacts-list" id="contactsList"></div>
+    </div>
+
+    <div class="card">
+      <h2>📹 Camera & Recording</h2>
+      <button id="enableCamera" class="btn-success">Enable Camera</button>
+      <video id="videoPreview" autoplay muted playsinline></video>
+      <div class="recording-indicator" id="recordingIndicator">
+        <div class="recording-dot"></div>
+        <span id="recordingTime">Recording: 0:00</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📱 Motion Detection & SOS</h2>
+      <button id="sendSOS">Send SOS Manually</button>
+      <div id="status">🔄 Initializing shake detection...</div>
+    </div>
+  </div>
+
+  <div class="countdown-modal" id="countdownModal">
+    <div class="countdown-content">
+      <div class="countdown-text">🚨 SOS ALERT IN</div>
+      <div class="countdown-number" id="countdownNumber">3</div>
+      <button class="btn-cancel" id="cancelSOS">CANCEL SOS</button>
+    </div>
+  </div>
+
+  <script type="module">
+    // ==================== CAMERA MODULE ====================
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    let recordingStartTime = null;
+    let recordingTimer = null;
+    let currentSosId = null;
+
+    const videoPreview = document.getElementById("videoPreview");
+    const recordingIndicator = document.getElementById("recordingIndicator");
+    const recordingTime = document.getElementById("recordingTime");
+
+    async function enableCamera() {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true
+        });
+        videoPreview.srcObject = mediaStream;
+        videoPreview.style.display = "block";
+        console.log("✅ Camera enabled");
+        return true;
+      } catch (err) {
+        console.error("❌ Camera access denied:", err);
+        alert("⚠️ Camera access denied. Please enable camera permissions.");
+        return false;
+      }
+    }
+
+    async function startRecording(sosId = null) {
+      if (!mediaStream) {
+        const enabled = await enableCamera();
+        if (!enabled) return false;
+      }
+      if (isRecording) return false;
+
+      try {
+        recordedChunks = [];
+        currentSosId = sosId;
+        
+        let options = { mimeType: 'video/webm;codecs=vp9,opus', videoBitsPerSecond: 2500000 };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = 'video/webm';
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = 'video/mp4';
+
+        mediaRecorder = new MediaRecorder(mediaStream, options);
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) recordedChunks.push(event.data);
+        };
+        mediaRecorder.onstop = async () => await uploadRecording();
+        mediaRecorder.start(1000);
+        
+        isRecording = true;
+        recordingStartTime = Date.now();
+        recordingIndicator.classList.add("active");
+        startRecordingTimer();
+
+        console.log("📹 Recording started");
+        return true;
+      } catch (err) {
+        console.error("❌ Failed to start recording:", err);
+        return false;
+      }
+    }
+
+    async function stopRecording() {
+      if (!isRecording || !mediaRecorder) return false;
+      try {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordingIndicator.classList.remove("active");
+        stopRecordingTimer();
+        console.log("⏹️ Recording stopped");
+        return true;
+      } catch (err) {
+        console.error("❌ Failed to stop recording:", err);
+        return false;
+      }
+    }
+
+    async function uploadRecording() {
+      if (recordedChunks.length === 0) return;
+      try {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const duration = Math.floor((Date.now() - recordingStartTime) / 1000);
+        
+        let location = { latitude: "Unknown", longitude: "Unknown" };
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+          });
+          location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        } catch (err) {
+          console.warn("⚠️ Location not available");
+        }
+
+        const userProfile = JSON.parse(localStorage.getItem("userProfile") || "{}");
+        const formData = new FormData();
+        formData.append("recording", blob, `sos-recording-${Date.now()}.webm`);
+        formData.append("sosId", currentSosId || Date.now());
+        formData.append("user", userProfile.name || "Anonymous");
+        formData.append("location", JSON.stringify(location));
+        formData.append("duration", `${duration}s`);
+
+        const response = await fetch("http://localhost:3000/upload-recording", {
+          method: "POST",
+          body: formData
+        });
+        const result = await response.json();
+        console.log("✅ Recording uploaded:", result);
+        alert(`📹 Recording uploaded successfully!\nDuration: ${duration}s`);
+      } catch (err) {
+        console.error("❌ Failed to upload recording:", err);
+      }
+    }
+
+    function startRecordingTimer() {
+      recordingTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        recordingTime.textContent = `Recording: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+      }, 1000);
+    }
+
+    function stopRecordingTimer() {
+      if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+      }
+    }
+
+    // ==================== SOS MODULE ====================
+    const DEFAULT_CONTACTS = [
+      { name: "Mom", phone: "+919481425584" },
+      { name: "Dad", phone: "+918618147776" }
+    ];
+
+    const SOS_SETTINGS = {
+      countdownDuration: 3,
+      autoLoadDefaultContacts: true,
+      allowUIContactManagement: true,
+      allowProfileEditing: true,
+      autoRecordOnSOS: true,
+      recordingDuration: 30000
+    };
+
+    let countdownTimer = null;
+    let contacts = [];
+    let userProfile = {};
+    let recordingTimeout = null;
+
+    function loadUserProfile() {
+      const saved = localStorage.getItem("userProfile");
+      const isFirstVisit = localStorage.getItem("profileInitialized") !== "true";
+      
+      if (isFirstVisit) {
+        userProfile = { name: "", bloodType: "", medicalInfo: "", emergencyNote: "" };
+        localStorage.setItem("userProfile", JSON.stringify(userProfile));
+        localStorage.setItem("profileInitialized", "true");
+      } else if (saved) {
+        userProfile = JSON.parse(saved);
+      } else {
+        userProfile = { name: "", bloodType: "", medicalInfo: "", emergencyNote: "" };
+      }
+      renderProfile();
+    }
+
+    function saveUserProfile() {
+      localStorage.setItem("userProfile", JSON.stringify(userProfile));
+      renderProfile();
+    }
+
+    function renderProfile() {
+      document.getElementById("userName").value = userProfile.name || "";
+      document.getElementById("userBloodType").value = userProfile.bloodType || "";
+      document.getElementById("userMedicalInfo").value = userProfile.medicalInfo || "";
+      document.getElementById("userEmergencyNote").value = userProfile.emergencyNote || "";
+      
+      const statusEl = document.getElementById("profileStatus");
+      if (userProfile.name) {
+        statusEl.textContent = `✅ Profile saved as: ${userProfile.name}`;
+        statusEl.style.color = "#51cf66";
+      } else {
+        statusEl.textContent = "⚠️ Profile not set - please add your name";
+        statusEl.style.color = "#ffa94d";
+      }
+    }
+
+    window.saveProfile = function() {
+      userProfile.name = document.getElementById("userName").value.trim() || "User";
+      userProfile.bloodType = document.getElementById("userBloodType").value.trim();
+      userProfile.medicalInfo = document.getElementById("userMedicalInfo").value.trim();
+      userProfile.emergencyNote = document.getElementById("userEmergencyNote").value.trim();
+      saveUserProfile();
+      alert("✅ Profile saved successfully!");
+    };
+
+    function loadContacts() {
+      const saved = localStorage.getItem("emergencyContacts");
+      const isFirstVisit = localStorage.getItem("contactsInitialized") !== "true";
+      
+      if (isFirstVisit && SOS_SETTINGS.autoLoadDefaultContacts) {
+        contacts = [...DEFAULT_CONTACTS];
+        localStorage.setItem("emergencyContacts", JSON.stringify(contacts));
+        localStorage.setItem("contactsInitialized", "true");
+      } else if (saved) {
+        contacts = JSON.parse(saved);
+      } else {
+        contacts = [...DEFAULT_CONTACTS];
+      }
+      renderContacts();
+    }
+
+    function saveContacts() {
+      localStorage.setItem("emergencyContacts", JSON.stringify(contacts));
+      renderContacts();
+    }
+
+    function renderContacts() {
+      const listEl = document.getElementById("contactsList");
+      if (contacts.length === 0) {
+        listEl.innerHTML = '<p style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">No emergency contacts added yet</p>';
+        return;
+      }
+      listEl.innerHTML = contacts.map((contact, index) => `
+        <div class="contact-item">
+          <div class="contact-info">
+            <div class="contact-name">${contact.name}</div>
+            <div class="contact-phone">${contact.phone}</div>
+          </div>
+          ${SOS_SETTINGS.allowUIContactManagement ? 
+            `<button class="btn-remove" onclick="window.removeContact(${index})">Remove</button>` : ''}
+        </div>
+      `).join("");
+    }
+
+    window.addContact = function() {
+      const nameInput = document.getElementById("contactName");
+      const phoneInput = document.getElementById("contactPhone");
+      const name = nameInput.value.trim();
+      const phone = phoneInput.value.trim();
+      
+      if (!name || !phone) {
+        alert("Please enter both name and phone number");
+        return;
+      }
+      if (!phone.startsWith("+")) {
+        alert("Please include country code (e.g., +919876543210)");
+        return;
+      }
+      
+      contacts.push({ name, phone });
+      saveContacts();
+      nameInput.value = "";
+      phoneInput.value = "";
+      alert(`✅ ${name} added as emergency contact`);
+    };
+
+    window.removeContact = function(index) {
+      if (confirm(`Remove ${contacts[index].name} from emergency contacts?`)) {
+        contacts.splice(index, 1);
+        saveContacts();
+      }
+    };
+
+    function startSOSCountdown() {
+      if (contacts.length === 0) {
+        alert("⚠️ No emergency contacts configured! Please add contacts first.");
+        return;
+      }
+
+      const modal = document.getElementById("countdownModal");
+      const numberEl = document.getElementById("countdownNumber");
+      let count = SOS_SETTINGS.countdownDuration;
+      
+      modal.classList.add("active");
+      numberEl.textContent = count;
+      
+      countdownTimer = setInterval(() => {
+        count--;
+        numberEl.textContent = count;
+        if (count <= 0) {
+          clearInterval(countdownTimer);
+          modal.classList.remove("active");
+          sendWhatsAppSOS(null);
+        }
+      }, 1000);
+    }
+
+    function cancelCountdown() {
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+      document.getElementById("countdownModal").classList.remove("active");
+      document.getElementById("status").textContent = "✅ SOS cancelled. Motion sensors still active.";
+    }
+
+    async function sendWhatsAppSOS(shakeIntensity = null) {
+      console.log("📡 SOS triggered!");
+      const statusEl = document.getElementById("status");
+      statusEl.textContent = "📍 Getting location...";
+
+      const sosId = Date.now();
+      if (SOS_SETTINGS.autoRecordOnSOS && !isRecording) {
+        console.log("📹 Starting automatic recording...");
+        await startRecording(sosId);
+        recordingTimeout = setTimeout(async () => {
+          await stopRecording();
+          console.log("⏹️ Auto-stopped recording");
+        }, SOS_SETTINGS.recordingDuration);
+      }
+
+      let location = { latitude: "Unknown", longitude: "Unknown" };
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true, timeout: 5000, maximumAge: 0
+          });
+        });
+        location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      } catch (err) {
+        console.warn("⚠️ Location not available:", err.message);
+      }
+
+      const time = new Date().toLocaleString();
+      const mapsLink = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+      
+      let message = `🚨 *EMERGENCY SOS ALERT*\n\n`;
+      message += `👤 Name: ${userProfile.name || "Unknown"}\n`;
+      message += `📅 Time: ${time}\n`;
+      message += `📍 Location: ${mapsLink}\n`;
+      if (shakeIntensity) message += `⚠️ Shake Intensity: ${shakeIntensity.toFixed(2)}\n`;
+      if (userProfile.bloodType) message += `🩸 Blood Type: ${userProfile.bloodType}\n`;
+      if (userProfile.medicalInfo) message += `💊 Medical Info: ${userProfile.medicalInfo}\n`;
+      if (userProfile.emergencyNote) message += `\n📝 Note: ${userProfile.emergencyNote}\n`;
+      if (SOS_SETTINGS.autoRecordOnSOS) message += `\n📹 Video recording started automatically\n`;
+      message += `\nThis is an automated emergency alert. Please respond immediately.`;
+
+      try {
+        await fetch("http://localhost:3000/sos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user: userProfile.name || "Unknown",
+            time: new Date().toISOString(),
+            triggeredBy: shakeIntensity ? "Shake Detection" : "Manual",
+            location, userProfile,
+            intensity: shakeIntensity ? shakeIntensity.toFixed(2) : "N/A",
+            contactsNotified: contacts.length,
+            recordingStarted: SOS_SETTINGS.autoRecordOnSOS
+          }),
+        });
+      } catch (err) {
+        console.error("❌ Failed to send to server:", err);
+      }
+
+      const encodedMessage = encodeURIComponent(message);
+      statusEl.textContent = `📤 Sending SOS to ${contacts.length} contact(s)...`;
+      
+      contacts.forEach((contact) => {
+        const phoneNumber = contact.phone.replace(/[^0-9]/g, "");
+        const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+        window.open(whatsappURL, "_blank");
+      });
+
+      statusEl.textContent = `✅ SOS sent to ${contacts.length} contact(s)!`;
+      setTimeout(() => {
+        alert(`🚨 Emergency SOS sent!\n\n📹 Recording: ${SOS_SETTINGS.autoRecordOnSOS ? 'Active' : 'Not started'}\n📍 Location: Included\n📞 Contacts: ${contacts.length}`);
+      }, 500);
+    }
+
+    // ==================== SHAKE DETECTION MODULE ====================
+    let lastShakeTime = 0;
+    let shakeThreshold = 15;
+    let statusEl;
+    let shakeIntensity = 0;
+
+    async function requestMotionPermission() {
+      if (typeof DeviceMotionEvent.requestPermission === "function") {
+        try {
+          const response = await DeviceMotionEvent.requestPermission();
+          if (response === "granted") {
+            initShakeDetection();
+          } else {
+            alert("Permission denied. Please allow motion access in settings.");
+          }
+        } catch (err) {
+          console.error("Error requesting motion permission:", err);
+        }
+      } else {
+        initShakeDetection();
+      }
+    }
+
+    function initShakeDetection() {
+      window.addEventListener("devicemotion", event => {
+        const { x, y, z } = event.accelerationIncludingGravity;
+        const totalAcceleration = Math.sqrt(x * x + y * y + z * z);
+
+        if (totalAcceleration > 5) {
+          logShakeIntensity(totalAcceleration, x, y, z);
+        }
+
+        if (totalAcceleration > shakeThreshold) {
+          const now = Date.now();
+          if (now - lastShakeTime > 2000) {
+            lastShakeTime = now;
+            shakeIntensity = totalAcceleration;
+            console.log("🚨 Shake detected! Intensity:", totalAcceleration.toFixed(2));
+            statusEl.textContent = "🚨 Shake detected! Sending SOS...";
+            sendWhatsAppSOS(shakeIntensity);
+          }
+        }
+      });
+      statusEl.textContent = "✅ Motion sensors active. Shake to trigger SOS.";
+    }
+
+    async function logShakeIntensity(intensity, x, y, z) {
+      try {
+        await fetch("http://localhost:3000/shake-intensity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            intensity: intensity.toFixed(2),
+            acceleration: { x: x.toFixed(2), y: y.toFixed(2), z: z.toFixed(2) },
+            timestamp: new Date().toISOString()
+          }),
+        });
+      } catch (err) {
+        console.log("Shake intensity logged");
+      }
+    }
+
+    // ==================== INITIALIZATION ====================
+    document.addEventListener("DOMContentLoaded", () => {
+      loadContacts();
+      loadUserProfile();
+      
+      statusEl = document.getElementById("status");
+      statusEl.textContent = "⚙️ Waiting for motion sensor permission...";
+      requestMotionPermission();
+      
+      document.getElementById("addContact").addEventListener("click", window.addContact);
+      document.getElementById("saveProfile").addEventListener("click", window.saveProfile);
+      document.getElementById("cancelSOS").addEventListener("click", cancelCountdown);
+      document.getElementById("sendSOS").addEventListener("click", startSOSCountdown);
+      document.getElementById("contactPhone").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") window.addContact();
+      });
+      
+      document.getElementById("enableCamera").addEventListener("click", async () => {
+        const enabled = await enableCamera();
+        if (enabled) {
+          document.getElementById("enableCamera").textContent = "✅ Camera Enabled";
+          document.getElementById("enableCamera").classList.add("btn-success");
+        }
+      });
+    });
+  </script>
+</body>
+</html>
