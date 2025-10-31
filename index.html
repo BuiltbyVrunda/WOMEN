@@ -378,6 +378,7 @@
     // Audio for ringtone and voice simulation
     let audioCtx = null;
     let ringtoneAudio = null;
+    let conversationAudio = null;
     let voiceNodes = [];
     let conversationTimer = null;
     let callTimer = null;
@@ -387,6 +388,14 @@
     function getAudioContext() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       return audioCtx;
+    }
+
+    // Initialize conversation audio
+    function initConversationAudio() {
+      if (!conversationAudio) {
+        conversationAudio = new Audio('othermainaudio.mp3');
+        conversationAudio.loop = true;
+      }
     }
 
     // Create ringtone audio element
@@ -1348,6 +1357,12 @@
         document.getElementById('callDuration').textContent = '';
         stopRingtone();
         stopVoiceSounds();
+        
+        // Stop conversation audio if playing
+        if (conversationAudio) {
+          conversationAudio.pause();
+          conversationAudio.currentTime = 0;
+        }
         if (callTimer) {
           clearInterval(callTimer);
           callTimer = null;
@@ -1444,6 +1459,11 @@
         document.getElementById('callActions').style.display = 'none';
         document.getElementById('conversationUI').style.display = 'block';
         stopRingtone();
+        
+        // Start playing conversation audio
+        initConversationAudio();
+        conversationAudio.currentTime = 0;
+        conversationAudio.play().catch(e => console.warn('Could not play conversation audio:', e));
 
         // Start call timer
         callStartTime = Date.now();
