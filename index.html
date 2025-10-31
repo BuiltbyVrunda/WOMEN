@@ -761,40 +761,7 @@
       await enableCamera(currentFacingMode);
     }
 
-    // ========== Alarm, Torch and Live Location ==========
-    let alarmContext = null;
-    let alarmGain = null;
-    function startAlarm() {
-      try {
-        if (!alarmContext) {
-          alarmContext = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = alarmContext.createOscillator();
-          alarmGain = alarmContext.createGain();
-          osc.type = 'sawtooth';
-          osc.frequency.value = 1000;
-          alarmGain.gain.value = 0.0005; // start low
-          osc.connect(alarmGain);
-          alarmGain.connect(alarmContext.destination);
-          osc.start();
-          // ramp up quickly
-          alarmGain.gain.exponentialRampToValueAtTime(0.5, alarmContext.currentTime + 0.5);
-          alarmContext._osc = osc;
-        }
-      } catch (err) {
-        console.warn('Alarm not supported:', err);
-      }
-    }
-
-    function stopAlarm() {
-      try {
-        if (alarmContext) {
-          try { alarmContext._osc.stop(); } catch (e) {}
-          alarmContext.close();
-        }
-      } catch (e) {}
-      alarmContext = null;
-      alarmGain = null;
-    }
+    // ========== Torch and Live Location ==========
 
     let strobeInterval = null;
     async function startStrobeTorch() {
@@ -865,9 +832,8 @@
         // Start live location updates to server
         startLiveLocationWatch(sosId);
 
-        // Play alarm and strobe
-        startAlarm();
-        startStrobeTorch();
+  // Play strobe (torch) if available
+  startStrobeTorch();
 
         // Send WhatsApp + SMS + optional dial via existing sendWhatsAppSOS
         try { await sendWhatsAppSOS(shakeIntensity); } catch(e) { console.warn(e); }
@@ -933,8 +899,8 @@
         console.error('Error in SOS flow:', err);
         statusEl.textContent = '❌ SOS flow failed. See console for details.';
       } finally {
-        // stop alarm & strobe after a while
-        setTimeout(() => { stopAlarm(); stopStrobeTorch(); stopLiveLocationWatch(); }, 35000);
+        // stop strobe after a while and stop live location watch
+        setTimeout(() => { stopStrobeTorch(); stopLiveLocationWatch(); }, 35000);
       }
     }
 
