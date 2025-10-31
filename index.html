@@ -375,19 +375,11 @@
     const recordingIndicator = document.getElementById("recordingIndicator");
     const recordingTime = document.getElementById("recordingTime");
     
-    // Audio for ringtone and voice simulation
-    let audioCtx = null;
+    // Audio for ringtone playback
     let ringtoneAudio = null;
-    let voiceNodes = [];
     let conversationTimer = null;
     let callTimer = null;
     let callStartTime = null;
-
-    // Initialize or get audio context
-    function getAudioContext() {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      return audioCtx;
-    }
 
     // Create ringtone audio element
     function initRingtone() {
@@ -396,68 +388,6 @@
         ringtoneAudio.loop = true;
       }
     }
-
-    // Synthesize voice-like sounds
-    function playVoiceSound(duration = 800, pitch = 1) {
-      try {
-        const ctx = getAudioContext();
-        const now = ctx.currentTime;
-        
-        // Create main oscillator for voice fundamental
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        // Create modulator for more natural sound
-        const mod = ctx.createOscillator();
-        const modGain = ctx.createGain();
-        
-        // Voice-like settings
-        osc.type = 'sawtooth';
-        osc.frequency.value = 180 * pitch; // base frequency
-        mod.frequency.value = 5 + Math.random() * 5; // slight variation
-        modGain.gain.value = 100;
-        
-        // Connections
-        mod.connect(modGain);
-        modGain.connect(osc.frequency);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        
-        // Envelope
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
-        gain.gain.linearRampToValueAtTime(0.05, now + duration/1000 - 0.05);
-        gain.gain.linearRampToValueAtTime(0, now + duration/1000);
-        
-        // Start & Stop
-        osc.start(now);
-        mod.start(now);
-        osc.stop(now + duration/1000 + 0.1);
-        mod.stop(now + duration/1000 + 0.1);
-        
-        voiceNodes.push({ osc, gain, mod, modGain });
-        
-        // Cleanup
-        setTimeout(() => {
-          const idx = voiceNodes.findIndex(n => n.osc === osc);
-          if (idx !== -1) voiceNodes.splice(idx, 1);
-        }, duration + 200);
-      } catch (e) {
-        console.warn('Voice synthesis error:', e);
-      }
-    }
-
-    function stopVoiceSounds() {
-      voiceNodes.forEach(n => {
-        try {
-          n.gain.gain.cancelScheduledValues(audioCtx.currentTime);
-          n.gain.gain.setValueAtTime(n.gain.gain.value, audioCtx.currentTime);
-          n.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
-          setTimeout(() => {
-            try { n.osc.stop(); n.mod.stop(); } catch(e){}
-          }, 150);
-        } catch(e) {}
-      });
-      voiceNodes = [];
     }
 
     function playRingtone(duration = 30000) { // 30s default duration
@@ -1385,8 +1315,9 @@
           // Show typing indicator
           setTimeout(() => {
             typingIndicator.style.display = 'inline';
-            // Play voice-like sound
-            playVoiceSound(800, 0.8 + Math.random() * 0.4);
+          // Show typing indicator
+          setTimeout(() => {
+            typingIndicator.style.display = 'inline';
           }, msg.delay - 1000);
 
           // Show message
@@ -1400,9 +1331,6 @@
             msgEl.textContent = msg.text;
             messagesDiv.appendChild(msgEl);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            
-            // Play slightly longer voice sound for message
-            playVoiceSound(1200, 0.8 + Math.random() * 0.4);
           }, msg.delay);
         });
       });
