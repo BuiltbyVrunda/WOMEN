@@ -395,7 +395,8 @@
     function initConversationAudio() {
       if (!conversationAudio) {
         try {
-          const fname = 'WhatsApp Audio 2025-10-31 at 22.34.51_4005dd8f.mp3';
+          // Prefer a dedicated conversation audio file placed in the repo
+          const fname = 'othermainaudio.mp3';
           const src = encodeURI(fname);
           conversationAudio = new Audio();
           conversationAudio.src = src;
