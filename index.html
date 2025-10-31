@@ -332,12 +332,23 @@
     <div class="call-card">
       <div class="caller-name" id="callerName">Unknown</div>
       <div class="caller-number" id="callerNumber">+0000000000</div>
-      <div style="margin:10px 0; color:var(--muted);">Incoming call</div>
-      <div class="call-actions">
+      <div style="margin:10px 0; color:var(--muted);" id="callStateLabel">Incoming call</div>
+      <div class="call-actions" id="callActions">
         <button id="declineCall" class="btn btn-ghost small" style="flex:1">Decline</button>
         <button id="acceptCall" class="btn btn-success small" style="flex:1">Answer</button>
       </div>
+      <!-- Conversation UI (shown when connected) -->
+      <div class="conversation" id="conversationUI" style="display:none; margin-top:15px;">
+        <div class="conversation-messages" id="conversationMessages" 
+             style="max-height:180px; overflow-y:auto; margin-bottom:12px; font-size:14px;">
+        </div>
+        <div class="typing-indicator" style="color:var(--muted); font-size:13px; margin-bottom:8px;">
+          <span id="typingIndicator" style="display:none">typing...</span>
+        </div>
+        <button id="endCall" class="btn btn-danger small">End Call</button>
+      </div>
       <div style="margin-top:12px; font-size:13px; color:var(--muted);" id="callStatus">Not answered</div>
+      <div style="margin-top:8px; font-size:12px; color:var(--muted);" id="callDuration"></div>
     </div>
   </div>
 
@@ -356,14 +367,87 @@
     const recordingIndicator = document.getElementById("recordingIndicator");
     const recordingTime = document.getElementById("recordingTime");
     
-    // Modern ringtone synthesizer - creates a realistic dual-tone ringtone
-    let ringtoneCtx = null;
+    // Audio synthesis for ringtone and voice simulation
+    let audioCtx = null;
     let ringtoneNodes = [];
     let ringtoneLoop = null;
+    let voiceNodes = [];
+    let conversationTimer = null;
+    let callTimer = null;
+    let callStartTime = null;
+
+    // Initialize or get audio context
+    function getAudioContext() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+
+    // Synthesize voice-like sounds
+    function playVoiceSound(duration = 800, pitch = 1) {
+      try {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+        
+        // Create main oscillator for voice fundamental
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        // Create modulator for more natural sound
+        const mod = ctx.createOscillator();
+        const modGain = ctx.createGain();
+        
+        // Voice-like settings
+        osc.type = 'sawtooth';
+        osc.frequency.value = 180 * pitch; // base frequency
+        mod.frequency.value = 5 + Math.random() * 5; // slight variation
+        modGain.gain.value = 100;
+        
+        // Connections
+        mod.connect(modGain);
+        modGain.connect(osc.frequency);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        // Envelope
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0.05, now + duration/1000 - 0.05);
+        gain.gain.linearRampToValueAtTime(0, now + duration/1000);
+        
+        // Start & Stop
+        osc.start(now);
+        mod.start(now);
+        osc.stop(now + duration/1000 + 0.1);
+        mod.stop(now + duration/1000 + 0.1);
+        
+        voiceNodes.push({ osc, gain, mod, modGain });
+        
+        // Cleanup
+        setTimeout(() => {
+          const idx = voiceNodes.findIndex(n => n.osc === osc);
+          if (idx !== -1) voiceNodes.splice(idx, 1);
+        }, duration + 200);
+      } catch (e) {
+        console.warn('Voice synthesis error:', e);
+      }
+    }
+
+    function stopVoiceSounds() {
+      voiceNodes.forEach(n => {
+        try {
+          n.gain.gain.cancelScheduledValues(audioCtx.currentTime);
+          n.gain.gain.setValueAtTime(n.gain.gain.value, audioCtx.currentTime);
+          n.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+          setTimeout(() => {
+            try { n.osc.stop(); n.mod.stop(); } catch(e){}
+          }, 150);
+        } catch(e) {}
+      });
+      voiceNodes = [];
+    }
 
     function playRingtone(duration = 30000) { // 30s default duration
       try {
-        if (!ringtoneCtx) ringtoneCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = getAudioContext();
         stopRingtone(); // clean up any existing
         
         const now = ringtoneCtx.currentTime;
@@ -1230,16 +1314,90 @@
       const callerNameEl = document.getElementById('callerName');
       const callerNumberEl = document.getElementById('callerNumber');
       const callStatus = document.getElementById('callStatus');
-      document.getElementById('declineCall').addEventListener('click', () => {
+      function endCall() {
         callModal.classList.remove('active');
-        callStatus.textContent = 'Call declined';
+        document.getElementById('conversationUI').style.display = 'none';
+        document.getElementById('callActions').style.display = 'flex';
+        document.getElementById('callStateLabel').textContent = 'Incoming call';
+        document.getElementById('conversationMessages').innerHTML = '';
+        document.getElementById('typingIndicator').style.display = 'none';
+        document.getElementById('callDuration').textContent = '';
         stopRingtone();
+        stopVoiceSounds();
+        if (callTimer) {
+          clearInterval(callTimer);
+          callTimer = null;
+        }
+        if (conversationTimer) {
+          clearInterval(conversationTimer);
+          conversationTimer = null;
+        }
+      }
+
+      document.getElementById('declineCall').addEventListener('click', () => {
+        endCall();
+        callStatus.textContent = 'Call declined';
+      });
+
+      document.getElementById('endCall').addEventListener('click', () => {
+        endCall();
+        callStatus.textContent = 'Call ended';
       });
       document.getElementById('acceptCall').addEventListener('click', () => {
+        // Switch to conversation UI
         callStatus.textContent = 'Connected';
-        // show connected for a few seconds then close
-        setTimeout(() => { callModal.classList.remove('active'); callStatus.textContent = 'Not answered'; }, 5000);
+        document.getElementById('callStateLabel').textContent = 'Call in progress';
+        document.getElementById('callActions').style.display = 'none';
+        document.getElementById('conversationUI').style.display = 'block';
         stopRingtone();
+
+        // Start call timer
+        callStartTime = Date.now();
+        callTimer = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+          const minutes = Math.floor(elapsed / 60);
+          const seconds = elapsed % 60;
+          document.getElementById('callDuration').textContent = 
+            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+
+        // Simulate conversation
+        const messages = [
+          { text: "Hey, how are you doing?", delay: 1000 },
+          { text: "I just wanted to check in.", delay: 3000 },
+          { text: "Have you seen the latest updates?", delay: 6000 },
+          { text: "Let me know if you need anything.", delay: 9000 },
+          { text: "I'll send you more details soon.", delay: 12000 },
+          { text: "Talk to you later!", delay: 15000 }
+        ];
+
+        const messagesDiv = document.getElementById('conversationMessages');
+        const typingIndicator = document.getElementById('typingIndicator');
+        
+        messages.forEach((msg, i) => {
+          // Show typing indicator
+          setTimeout(() => {
+            typingIndicator.style.display = 'inline';
+            // Play voice-like sound
+            playVoiceSound(800, 0.8 + Math.random() * 0.4);
+          }, msg.delay - 1000);
+
+          // Show message
+          setTimeout(() => {
+            typingIndicator.style.display = 'none';
+            const msgEl = document.createElement('div');
+            msgEl.style.padding = '8px 12px';
+            msgEl.style.background = 'rgba(255,255,255,0.1)';
+            msgEl.style.borderRadius = '8px';
+            msgEl.style.marginBottom = '8px';
+            msgEl.textContent = msg.text;
+            messagesDiv.appendChild(msgEl);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            // Play slightly longer voice sound for message
+            playVoiceSound(1200, 0.8 + Math.random() * 0.4);
+          }, msg.delay);
+        });
       });
 
       fakeCallBtn.addEventListener('click', () => {
