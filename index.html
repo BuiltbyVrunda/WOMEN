@@ -1197,32 +1197,119 @@
         try { await enableCamera(); await startRecording(Date.now()); startSOSCountdown(); } catch(e) { console.error(e); }
       });
 
-      // voice command (GRINGOTTS HELP)
+      // Enhanced voice commands for SOS
       let recognition = null;
       let listening = false;
       const voiceToggle = document.getElementById('voiceToggle');
+      const voiceFeedback = document.createElement('div');
+      voiceFeedback.style.position = 'fixed';
+      voiceFeedback.style.bottom = '20px';
+      voiceFeedback.style.left = '50%';
+      voiceFeedback.style.transform = 'translateX(-50%)';
+      voiceFeedback.style.padding = '10px 20px';
+      voiceFeedback.style.background = 'rgba(0,0,0,0.8)';
+      voiceFeedback.style.color = '#fff';
+      voiceFeedback.style.borderRadius = '20px';
+      voiceFeedback.style.zIndex = '9999';
+      voiceFeedback.style.display = 'none';
+      document.body.appendChild(voiceFeedback);
+
       if (window.SpeechRecognition || window.webkitSpeechRecognition) {
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRec();
         recognition.lang = 'en-US';
         recognition.continuous = true;
-        recognition.interimResults = false;
+        recognition.interimResults = true; // Enable interim results for faster response
+
+        // Show visual feedback for voice detection
+        recognition.onaudiostart = () => {
+          voiceFeedback.style.display = 'block';
+          voiceFeedback.textContent = '🎙️ Listening...';
+        };
+
+        recognition.onend = () => {
+          if (listening) {
+            recognition.start(); // Keep listening
+          } else {
+            voiceFeedback.style.display = 'none';
+          }
+        };
+
         recognition.onresult = (ev) => {
-          for (let i=ev.resultIndex;i<ev.results.length;i++){
-            const t = ev.results[i][0].transcript.trim().toLowerCase();
-            if (t.includes('gringotts help')) {
-              console.log('Voice trigger detected:', t);
-              // mirror shake behavior
-              (async ()=>{ try{ await enableCamera(); await startRecording(Date.now()); startSOSCountdown(); }catch(e){console.error(e);} })();
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            const result = ev.results[i];
+            const transcript = result[0].transcript.trim().toLowerCase();
+            
+            // Show what was heard
+            voiceFeedback.textContent = `🎙️ Heard: ${transcript}`;
+            
+            // Check for trigger phrases
+            if (
+              transcript.includes('ok gringotts') ||
+              transcript.includes('help') ||
+              transcript.includes('gringotts help')
+            ) {
+              console.log('Voice trigger detected:', transcript);
+              voiceFeedback.textContent = '🚨 SOS Triggered by voice!';
+              
+              // Start full SOS flow immediately
+              (async () => {
+                try {
+                  // Start camera and recording
+                  await enableCamera();
+                  await startRecording(Date.now());
+                  
+                  // Start live location watch
+                  startLiveLocationWatch(Date.now());
+                  
+                  // Trigger immediate SOS (skip countdown for voice emergency)
+                  await startFullSOSFlow(null, { 
+                    skipCountdown: true, 
+                    reason: 'Voice Command: ' + transcript 
+                  });
+                  
+                  // Hide feedback after a moment
+                  setTimeout(() => {
+                    voiceFeedback.style.display = 'none';
+                  }, 3000);
+                } catch(e) {
+                  console.error('SOS flow error:', e);
+                  voiceFeedback.textContent = '❌ Error triggering SOS';
+                  setTimeout(() => {
+                    voiceFeedback.style.display = 'none';
+                  }, 3000);
+                }
+              })();
             }
           }
         };
-        recognition.onerror = (e) => console.warn('Recognition error', e);
+
+        recognition.onerror = (e) => {
+          console.warn('Recognition error', e);
+          voiceFeedback.textContent = '⚠️ Voice recognition error';
+          setTimeout(() => {
+            voiceFeedback.style.display = 'none';
+          }, 3000);
+        };
       }
+
       voiceToggle.addEventListener('click', () => {
-        if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
-        if (!listening) { recognition.start(); listening = true; voiceToggle.textContent = '🎙️ Voice: ON'; }
-        else { recognition.stop(); listening = false; voiceToggle.textContent = '🎙️ Voice: OFF'; }
+        if (!recognition) { 
+          alert('Voice recognition not supported in this browser.'); 
+          return; 
+        }
+        if (!listening) { 
+          recognition.start(); 
+          listening = true; 
+          voiceToggle.textContent = '🎙️ Voice: ON';
+          voiceToggle.style.background = 'rgba(255,0,0,0.2)';
+        } else { 
+          recognition.stop(); 
+          listening = false; 
+          voiceToggle.textContent = '🎙️ Voice: OFF';
+          voiceToggle.style.background = 'transparent';
+          voiceFeedback.style.display = 'none';
+        }
       });
 
       // simulate power button presses (5 rapid presses)
