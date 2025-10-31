@@ -375,10 +375,9 @@
     const recordingIndicator = document.getElementById("recordingIndicator");
     const recordingTime = document.getElementById("recordingTime");
     
-    // Audio synthesis for ringtone and voice simulation
+    // Audio for ringtone and voice simulation
     let audioCtx = null;
-    let ringtoneNodes = [];
-    let ringtoneLoop = null;
+    let ringtoneAudio = null;
     let voiceNodes = [];
     let conversationTimer = null;
     let callTimer = null;
@@ -388,6 +387,14 @@
     function getAudioContext() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       return audioCtx;
+    }
+
+    // Create ringtone audio element
+    function initRingtone() {
+      if (!ringtoneAudio) {
+        ringtoneAudio = new Audio('WhatsApp Audio 2025-10-31 at 22.34.51_4005dd8f.mp3');
+        ringtoneAudio.loop = true;
+      }
     }
 
     // Synthesize voice-like sounds
@@ -455,84 +462,17 @@
 
     function playRingtone(duration = 30000) { // 30s default duration
       try {
-        const ctx = getAudioContext();
-        stopRingtone(); // clean up any existing
+        initRingtone();
+        stopRingtone(); // stop any existing playback
         
-        const now = ringtoneCtx.currentTime;
-        // iPhone-like ringtone pattern (sophisticated dual-tone melody)
-        const melodyBase = [
-          [988, 1109], [0, 0], // B5+C#6
-          [988, 1109], [0, 0], // repeat
-          [1109, 1319], [0, 0], // C#6+E6
-          [880, 988],   [0, 0]  // A5+B5
-        ];
-        
-        // Create full melody with variation
-        const melody = [
-          ...melodyBase,
-          // variation
-          [1109, 1319], [0, 0], // C#6+E6
-          [988, 1109], [0, 0],  // B5+C#6
-          [880, 988], [0, 0],   // A5+B5
-          [784, 880], [0, 0],   // G5+A5
-          // end bar
-          [0, 0], [0, 0]       // longer pause between loops
-        ];
+        // Start playing the audio file
+        ringtoneAudio.currentTime = 0;
+        ringtoneAudio.play();
 
-        function playPattern(startTime) {
-          let t = startTime;
-          const noteLength = 0.15;  // slightly faster for more urgency
-          const fadeInTime = 0.04;
-          const fadeOutTime = 0.11;
-          
-          melody.forEach(([freq1, freq2]) => {
-            if (freq1 === 0 && freq2 === 0) {
-              t += noteLength;
-              return;
-            }
-            
-            // Create two oscillators for rich dual-tone
-            [freq1, freq2].forEach(freq => {
-              if (!freq) return;
-              const osc = ringtoneCtx.createOscillator();
-              const gain = ringtoneCtx.createGain();
-              // Use sine for the base tone
-              osc.type = 'sine';
-              osc.frequency.value = freq;
-              
-              // Careful volume envelope
-              gain.gain.setValueAtTime(0.0001, t);
-              // Quick fade in
-              gain.gain.exponentialRampToValueAtTime(0.15, t + fadeInTime);
-              // Gentle fade out
-              gain.gain.exponentialRampToValueAtTime(0.0001, t + fadeOutTime);
-              
-              osc.connect(gain);
-              gain.connect(ringtoneCtx.destination);
-              
-              osc.start(t);
-              osc.stop(t + noteLength);
-              
-              ringtoneNodes.push({ osc, gain });
-            });
-            
-            t += noteLength;
-          });
-          
-          return t; // return end time
+        // Stop after duration if provided
+        if (duration) {
+          setTimeout(() => stopRingtone(), duration);
         }
-
-        // Initial play
-        let nextStartTime = playPattern(now);
-        
-        // Loop the pattern with a natural gap
-        const patternDuration = (nextStartTime - now);
-        ringtoneLoop = setInterval(() => {
-          nextStartTime = playPattern(ringtoneCtx.currentTime);
-        }, patternDuration * 1000);
-
-        // Stop after duration
-        setTimeout(() => stopRingtone(), duration);
       } catch (e) {
         console.warn('Ringtone unavailable:', e);
       }
@@ -540,21 +480,10 @@
 
     function stopRingtone() {
       try {
-        // Clear loop interval
-        if (ringtoneLoop) {
-          clearInterval(ringtoneLoop);
-          ringtoneLoop = null;
+        if (ringtoneAudio) {
+          ringtoneAudio.pause();
+          ringtoneAudio.currentTime = 0;
         }
-        // Stop all oscillators
-        ringtoneNodes.forEach(n => {
-          try {
-            n.gain.gain.cancelScheduledValues(ringtoneCtx.currentTime);
-            n.gain.gain.setValueAtTime(n.gain.gain.value, ringtoneCtx.currentTime);
-            n.gain.gain.exponentialRampToValueAtTime(0.0001, ringtoneCtx.currentTime + 0.02);
-            setTimeout(() => n.osc.stop(), 25);
-          } catch(e) {}
-        });
-        ringtoneNodes = [];
       } catch (e) {
         console.warn('Error stopping ringtone:', e);
       }
