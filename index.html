@@ -379,6 +379,7 @@
     let audioCtx = null;
     let ringtoneAudio = null;
     let conversationAudio = null;
+  let conversationSource = null;
     let voiceNodes = [];
     let conversationTimer = null;
     let callTimer = null;
@@ -406,6 +407,18 @@
           conversationAudio.addEventListener('error', (ev) => {
             console.warn('Conversation audio load error', ev);
           });
+          // Connect the audio element to the AudioContext destination to ensure playback routing
+          try {
+            const ctx = getAudioContext();
+            // If createMediaElementSource throws because the element is already connected elsewhere, ignore
+            if (!conversationSource) {
+              conversationSource = ctx.createMediaElementSource(conversationAudio);
+              conversationSource.connect(ctx.destination);
+            }
+          } catch (e) {
+            // Not critical; playback may still work via element's own sink
+            console.warn('Could not attach conversation audio to AudioContext:', e);
+          }
         } catch (e) {
           console.warn('Could not initialize conversation audio:', e);
         }
@@ -1398,10 +1411,14 @@
         stopRingtone();
         stopVoiceSounds();
         
-        // Stop conversation audio if playing
+        // Stop conversation audio if playing and disconnect from AudioContext
         if (conversationAudio) {
-          conversationAudio.pause();
-          conversationAudio.currentTime = 0;
+          try { conversationAudio.pause(); } catch(e){}
+          try { conversationAudio.currentTime = 0; } catch(e){}
+        }
+        if (conversationSource) {
+          try { conversationSource.disconnect(); } catch(e){}
+          conversationSource = null;
         }
         if (callTimer) {
           clearInterval(callTimer);
