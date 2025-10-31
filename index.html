@@ -347,6 +347,47 @@
     const videoPreview = document.getElementById("videoPreview");
     const recordingIndicator = document.getElementById("recordingIndicator");
     const recordingTime = document.getElementById("recordingTime");
+    
+    // ringtone synth (no external file required) - will play on user gesture
+    let ringtoneCtx = null;
+    let ringtoneNodes = [];
+    function playRingtone(duration = 8000) {
+      try {
+        if (!ringtoneCtx) ringtoneCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = ringtoneCtx.currentTime;
+        const melody = [880, 0, 880, 0, 988, 0, 784]; // simple pattern
+        ringtoneNodes.forEach(n => { try{ n.osc.stop(); }catch(e){} });
+        ringtoneNodes = [];
+        let t = now;
+        melody.forEach((freq, i) => {
+          if (freq === 0) { t += 0.18; return; }
+          const osc = ringtoneCtx.createOscillator();
+          const gain = ringtoneCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.value = 0.0001;
+          osc.connect(gain);
+          gain.connect(ringtoneCtx.destination);
+          osc.start(t);
+          gain.gain.exponentialRampToValueAtTime(0.12, t + 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+          osc.stop(t + 0.18);
+          ringtoneNodes.push({ osc, gain });
+          t += 0.18;
+        });
+        // stop any residual after duration
+        setTimeout(() => stopRingtone(), duration);
+      } catch (e) { console.warn('Ringtone unavailable', e); }
+    }
+    function stopRingtone() {
+      try {
+        ringtoneNodes.forEach(n => { try{ n.osc.stop(); }catch(e){} });
+        ringtoneNodes = [];
+        if (ringtoneCtx && ringtoneCtx.state === 'running') {
+          // don't close ctx to allow reuse
+        }
+      } catch (e) {}
+    }
 
     async function enableCamera(facing = currentFacingMode) {
       try {
@@ -689,17 +730,21 @@
           console.log("⏹️ Auto-stopped recording");
         }, SOS_SETTINGS.recordingDuration);
       }
-
+      // Prefer live last-known location from the watcher (more 'live')
       let location = { latitude: "Unknown", longitude: "Unknown" };
-      try {
-        const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true, timeout: 5000, maximumAge: 0
+      if (lastKnownLocation && lastKnownLocation.latitude) {
+        location = { latitude: lastKnownLocation.latitude, longitude: lastKnownLocation.longitude };
+      } else {
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true, timeout: 5000, maximumAge: 0
+            });
           });
-        });
-        location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-      } catch (err) {
-        console.warn("⚠️ Location not available:", err.message);
+          location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        } catch (err) {
+          console.warn("⚠️ Location not available:", err.message);
+        }
       }
 
       const time = new Date().toLocaleString();
@@ -737,6 +782,8 @@
       const encodedMessage = encodeURIComponent(message);
       statusEl.textContent = `📤 Sending SOS to ${contacts.length} contact(s)...`;
       
+      // NOTE: Browsers cannot silently send WhatsApp messages without user interaction.
+      // We will open the prefilled wa.me link for each contact. The user must confirm/send in WhatsApp.
       contacts.forEach((contact) => {
         const phoneNumber = contact.phone.replace(/[^0-9]/g, "");
         const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
@@ -754,6 +801,11 @@
     let shakeThreshold = 15;
     let statusEl;
     let shakeIntensity = 0;
+  // Improved sustained-shake detection settings
+  let shakeStartTime = 0;
+  const SHAKE_START_THRESHOLD = 14; // start threshold
+  const SHAKE_END_THRESHOLD = 9; // drop threshold
+  const SHAKE_MIN_DURATION = 1500; // ms required above threshold to count as a deliberate shake
 
     async function requestMotionPermission() {
       if (typeof DeviceMotionEvent.requestPermission === "function") {
@@ -774,34 +826,47 @@
 
     function initShakeDetection() {
       window.addEventListener("devicemotion", async event => {
-        const { x, y, z } = event.accelerationIncludingGravity;
+        // prefer non-gravity acceleration if provided
+        const acc = event.acceleration && event.acceleration.x !== null ? event.acceleration : event.accelerationIncludingGravity;
+        const x = acc.x || 0, y = acc.y || 0, z = acc.z || 0;
         const totalAcceleration = Math.sqrt(x * x + y * y + z * z);
 
+        // log low-level data for server if meaningful
         if (totalAcceleration > 5) {
           logShakeIntensity(totalAcceleration, x, y, z);
         }
 
-        if (totalAcceleration > shakeThreshold) {
-          const now = Date.now();
-          if (now - lastShakeTime > 2000) {
-            lastShakeTime = now;
-            shakeIntensity = totalAcceleration;
-            console.log("🚨 Shake detected! Intensity:", totalAcceleration.toFixed(2));
-            statusEl.textContent = "🚨 Shake detected! Opening camera and recording...";
-            // open camera immediately and start recording
-            try {
-              const sosId = Date.now();
-              await enableCamera();
-              await startRecording(sosId);
-              // start the 3s countdown before sending the WhatsApp SOS
-              startSOSCountdown();
-            } catch (err) {
-              console.error('Error handling shake flow:', err);
+        const now = Date.now();
+        if (totalAcceleration >= SHAKE_START_THRESHOLD) {
+          if (shakeStartTime === 0) shakeStartTime = now;
+          // require being above threshold for a minimum duration to avoid false positives
+          if ((now - shakeStartTime) >= SHAKE_MIN_DURATION) {
+            // ensure we don't trigger repeatedly
+            if (now - lastShakeTime > 3000) {
+              lastShakeTime = now;
+              shakeIntensity = totalAcceleration;
+              console.log("🚨 Sustained shake detected! Intensity:", totalAcceleration.toFixed(2));
+              statusEl.textContent = "🚨 Shake detected! Opening camera and recording...";
+              // open camera immediately and start recording
+              try {
+                const sosId = Date.now();
+                await enableCamera();
+                await startRecording(sosId);
+                // start the 3s countdown before sending the WhatsApp SOS
+                startSOSCountdown();
+              } catch (err) {
+                console.error('Error handling shake flow:', err);
+              }
+              // reset
+              shakeStartTime = 0;
             }
           }
+        } else if (totalAcceleration < SHAKE_END_THRESHOLD) {
+          // reset start time when motion subsides
+          shakeStartTime = 0;
         }
-      });
-      statusEl.textContent = "✅ Motion sensors active. Shake to trigger SOS.";
+      }, { passive: true });
+      statusEl.textContent = "✅ Motion sensors active. Shake firmly for 1.5s to trigger SOS.";
     }
 
     // Flip/switch camera (front/back). Disallowed while recording to keep things simple.
@@ -852,21 +917,19 @@
       } catch (e) {}
     }
 
-    // Live location watch
+    // Live location watch (keeps lastKnownLocation up to date and posts to server frequently)
     let liveWatchId = null;
     function startLiveLocationWatch(sosId) {
       if (!('geolocation' in navigator)) return;
       try {
         liveWatchId = navigator.geolocation.watchPosition(async (pos) => {
-          const payload = {
-            sosId: sosId || null,
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            timestamp: new Date().toISOString()
-          };
+          lastKnownLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, timestamp: new Date().toISOString() };
+          const payload = { sosId: sosId || null, ...lastKnownLocation };
           try { await fetch('http://localhost:3000/sos-live',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}); } catch(e){}
-        }, (err) => {}, { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 });
-      } catch (e) {}
+        }, (err) => {
+          console.warn('Live location watch error', err);
+        }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 });
+      } catch (e) { console.warn('Failed to start live location', e); }
     }
 
     function stopLiveLocationWatch() {
@@ -1053,11 +1116,13 @@
       document.getElementById('declineCall').addEventListener('click', () => {
         callModal.classList.remove('active');
         callStatus.textContent = 'Call declined';
+        stopRingtone();
       });
       document.getElementById('acceptCall').addEventListener('click', () => {
         callStatus.textContent = 'Connected';
         // show connected for a few seconds then close
         setTimeout(() => { callModal.classList.remove('active'); callStatus.textContent = 'Not answered'; }, 5000);
+        stopRingtone();
       });
 
       fakeCallBtn.addEventListener('click', () => {
@@ -1071,6 +1136,8 @@
         callerNumberEl.textContent = caller.phone || '+0000000000';
         callStatus.textContent = 'Ringing...';
         callModal.classList.add('active');
+        // Play ringtone (user gesture present because button was clicked)
+        try { playRingtone(20000); } catch (e) { console.warn(e); }
       });
       document.getElementById("contactPhone").addEventListener("keypress", (e) => {
         if (e.key === "Enter") window.addContact();
