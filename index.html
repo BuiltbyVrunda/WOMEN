@@ -345,6 +345,14 @@
         <div class="typing-indicator" style="color:var(--muted); font-size:13px; margin-bottom:8px;">
           <span id="typingIndicator" style="display:none">typing...</span>
         </div>
+        <div class="call-actions" style="display:flex; gap:8px; margin-bottom:12px;">
+          <button id="shareLocation" class="btn btn-primary small" style="flex:1">
+            📍 Share Location
+          </button>
+          <button id="shareToContact" class="btn btn-primary small" style="flex:1">
+            ↗️ Send to Contact
+          </button>
+        </div>
         <button id="endCall" class="btn btn-danger small">End Call</button>
       </div>
       <div style="margin-top:12px; font-size:13px; color:var(--muted);" id="callStatus">Not answered</div>
@@ -1343,6 +1351,76 @@
         endCall();
         callStatus.textContent = 'Call ended';
       });
+      // Function to share fake call status to WhatsApp
+      async function shareFakeCallToWhatsApp(contact, includeLocation = false) {
+        try {
+          let message = `🚨 Urgent: In a concerning call\n`;
+          message += `📞 Duration: ${document.getElementById('callDuration').textContent}\n`;
+          
+          if (includeLocation) {
+            try {
+              const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                  enableHighAccuracy: true,
+                  timeout: 5000,
+                  maximumAge: 0
+                });
+              });
+              const mapsLink = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+              message += `📍 My Location: ${mapsLink}\n`;
+            } catch (err) {
+              console.warn('Location not available:', err);
+              message += `📍 Location: Not available\n`;
+            }
+          }
+          
+          message += `\n🙏 Please check on me - I might need help.`;
+          
+          const encodedMessage = encodeURIComponent(message);
+          const phoneNumber = contact.phone.replace(/[^0-9]/g, "");
+          const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+          window.open(whatsappURL, `wa_fakecall_${Date.now()}`);
+        } catch (e) {
+          console.warn('Failed to share to WhatsApp:', e);
+          alert('Could not share to WhatsApp. Please try again.');
+        }
+      }
+
+      // Share buttons event listeners
+      document.getElementById('shareLocation').addEventListener('click', async () => {
+        if (contacts.length === 0) {
+          alert('Please add emergency contacts first.');
+          return;
+        }
+        // Share to first contact by default, or let user choose if multiple
+        let contact = contacts[0];
+        if (contacts.length > 1) {
+          const choice = confirm('Share to first emergency contact? Cancel to share to all contacts.');
+          if (!choice) {
+            contacts.forEach(c => shareFakeCallToWhatsApp(c, true));
+            return;
+          }
+        }
+        await shareFakeCallToWhatsApp(contact, true);
+      });
+
+      document.getElementById('shareToContact').addEventListener('click', async () => {
+        if (contacts.length === 0) {
+          alert('Please add emergency contacts first.');
+          return;
+        }
+        // Share to first contact by default, or let user choose if multiple
+        let contact = contacts[0];
+        if (contacts.length > 1) {
+          const choice = confirm('Share to first emergency contact? Cancel to share to all contacts.');
+          if (!choice) {
+            contacts.forEach(c => shareFakeCallToWhatsApp(c, false));
+            return;
+          }
+        }
+        await shareFakeCallToWhatsApp(contact, false);
+      });
+
       document.getElementById('acceptCall').addEventListener('click', () => {
         // Switch to conversation UI
         callStatus.textContent = 'Connected';
