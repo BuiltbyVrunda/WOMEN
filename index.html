@@ -320,6 +320,14 @@
     </div>
   </div>
 
+  <div class="countdown-modal" id="popupBlockedModal" style="--z:9999">
+    <div class="countdown-content">
+      <div class="countdown-text">⚠️ Popups were blocked</div>
+      <div style="margin:10px 0; color:var(--muted); font-size:14px;">Your browser blocked opening multiple WhatsApp chats. Tap the button below to open them manually.</div>
+      <button class="btn btn-primary" id="openAllWhatsAppBtn">Open WhatsApp Chats</button>
+    </div>
+  </div>
+
   <div class="call-modal" id="callModal">
     <div class="call-card">
       <div class="caller-name" id="callerName">Unknown</div>
@@ -780,19 +788,57 @@
       }
 
       const encodedMessage = encodeURIComponent(message);
-      statusEl.textContent = `📤 Sending SOS to ${contacts.length} contact(s)...`;
-      
-      // NOTE: Browsers cannot silently send WhatsApp messages without user interaction.
-      // We will open the prefilled wa.me link for each contact. The user must confirm/send in WhatsApp.
-      contacts.forEach((contact) => {
-        const phoneNumber = contact.phone.replace(/[^0-9]/g, "");
-        const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-        window.open(whatsappURL, "_blank");
+      statusEl.textContent = `📤 Attempting to open WhatsApp for ${contacts.length} contact(s)...`;
+
+      // NOTE: Browsers restrict opening many windows/tabs when not initiated by a user gesture.
+      // Strategy:
+      // 1) Attempt to open each wa.me link in its own uniquely-named window with a small stagger.
+      // 2) If any call to window.open is blocked (returns null), show a fallback modal with a
+      //    single "Open WhatsApp Chats" button which the user can tap (this is a user gesture)
+      //    and that will open all chats reliably.
+
+      const urls = contacts.map(c => {
+        const phoneNumber = (c.phone || '').replace(/[^0-9]/g, "");
+        return { phone: phoneNumber, url: `https://wa.me/${phoneNumber}?text=${encodedMessage}` };
       });
 
-      statusEl.textContent = `✅ SOS sent to ${contacts.length} contact(s)!`;
+      let popupBlocked = false;
+      for (let i = 0; i < urls.length; i++) {
+        const { phone, url } = urls[i];
+        try {
+          const winName = `wa_${phone}_${Date.now()}_${i}`;
+          const opened = window.open(url, winName);
+          if (!opened) { popupBlocked = true; break; }
+        } catch (e) {
+          console.warn('window.open failed for', url, e);
+          popupBlocked = true;
+          break;
+        }
+        // small stagger to avoid overwhelming the OS/app
+        await new Promise(r => setTimeout(r, 220));
+      }
+
+      if (popupBlocked) {
+        statusEl.textContent = '⚠️ Popups blocked — please tap the button to open WhatsApp chats.';
+        const fallback = document.getElementById('popupBlockedModal');
+        if (fallback) {
+          fallback.classList.add('active');
+          const btn = document.getElementById('openAllWhatsAppBtn');
+          btn.onclick = () => {
+            urls.forEach(u => { try { window.open(u.url, '_blank'); } catch (e){ console.warn(e); } });
+            fallback.classList.remove('active');
+            statusEl.textContent = `✅ Opened WhatsApp windows for ${urls.length} contact(s)`;
+          };
+        } else {
+          // If modal isn't present for some reason, at least try opening them in _blank once
+          urls.forEach(u => { try { window.open(u.url, '_blank'); } catch (e){ console.warn(e); } });
+        }
+      } else {
+        statusEl.textContent = `✅ Attempted to open WhatsApp for ${contacts.length} contact(s).`;
+      }
+
       setTimeout(() => {
-        alert(`🚨 Emergency SOS sent!\n\n📹 Recording: ${SOS_SETTINGS.autoRecordOnSOS ? 'Active' : 'Not started'}\n📍 Location: Included\n📞 Contacts: ${contacts.length}`);
+        alert(`🚨 Emergency SOS action initiated!\n\n📹 Recording: ${SOS_SETTINGS.autoRecordOnSOS ? 'Active' : 'Not started'}\n📍 Location: Included\n📞 Contacts: ${contacts.length}`);
       }, 500);
     }
 
