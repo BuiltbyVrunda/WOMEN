@@ -5,62 +5,66 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Emergency SOS + Recording System</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root{
+      --bg-0: #0f1724;
+      --bg-1: #111827;
+      --card: rgba(255,255,255,0.04);
+      --muted: rgba(255,255,255,0.6);
+      --accent: #ff6b6b;
+      --success: #51cf66;
+      --glass: rgba(255,255,255,0.03);
+      --glass-2: rgba(255,255,255,0.06);
     }
+    * { box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: white;
+      background: radial-gradient(1000px 600px at 10% 10%, rgba(255,107,107,0.06), transparent), linear-gradient(135deg, var(--bg-0) 0%, var(--bg-1) 100%);
+      color: #fff;
       min-height: 100vh;
-      padding: 20px;
+      padding: 28px;
+      -webkit-font-smoothing:antialiased;
     }
     .container {
-      max-width: 500px;
+      max-width: 720px;
       margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 20px;
     }
     h1 {
-      text-align: center;
-      color: #ff6b6b;
-      margin-bottom: 30px;
-      font-size: 28px;
+      grid-column: 1 / -1;
+      margin: 6px 0 18px 0;
+      color: var(--accent);
+      font-size: 26px;
+      letter-spacing: 0.6px;
+      display:flex; align-items:center; gap:12px;
     }
     .card {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 15px;
-      padding: 25px;
-      margin-bottom: 20px;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: linear-gradient(180deg, var(--glass), var(--glass-2));
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(6px) saturate(120%);
+      border: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 0 6px 18px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
     }
     h2 {
-      margin-bottom: 15px;
-      font-size: 20px;
+      margin-bottom: 12px;
+      font-size: 18px;
+      color: #fff;
     }
-    button {
-      width: 100%;
-      background: #ff4d4d;
-      color: white;
-      border: none;
-      padding: 15px 24px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 10px;
-      transition: all 0.3s ease;
+    button { transition: all 180ms ease; }
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      width:100%; padding:12px 14px; border-radius:10px; border:0; cursor:pointer; font-weight:700;
+      color:#fff;
     }
-    button:hover {
-      background: #ff1a1a;
-      transform: translateY(-2px);
-    }
-    button:disabled {
-      background: #666;
-      cursor: not-allowed;
-      transform: none;
-    }
+    .btn:hover{ transform: translateY(-3px); }
+    .btn-danger{ background: linear-gradient(90deg,#ff6b6b,#ff4d4d); }
+    .btn-primary{ background: linear-gradient(90deg,#5b8cff,#3b6bff); }
+    .btn-success{ background: var(--success); color:#01220a; }
+    .btn-ghost{ background: transparent; border:1px solid rgba(255,255,255,0.06); }
+    button:disabled{ opacity:0.6; cursor:not-allowed; transform:none; }
     .btn-success {
       background: #51cf66;
     }
@@ -134,6 +138,8 @@
       max-height: 300px;
       object-fit: cover;
     }
+    .controls-row{ display:flex; gap:10px; }
+    .small { padding:8px 10px; font-size:13px; }
     .recording-indicator {
       display: none;
       align-items: center;
@@ -184,6 +190,13 @@
       animation: pulse 0.8s infinite;
       box-shadow: 0 0 100px rgba(255, 0, 0, 0.8);
     }
+    /* Call modal */
+    .call-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:2000; align-items:center; justify-content:center; }
+    .call-modal.active{ display:flex; }
+    .call-card{ background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02)); padding:22px; border-radius:14px; width:320px; text-align:center; box-shadow:0 8px 40px rgba(2,6,23,0.7); }
+    .caller-name{ font-size:20px; font-weight:800; margin-bottom:6px; }
+    .caller-number{ color:var(--muted); margin-bottom:12px; }
+    .call-actions{ display:flex; gap:10px; }
     .countdown-number {
       font-size: 180px;
       font-weight: 900;
@@ -257,15 +270,23 @@
       <div style="display:flex; gap:10px; flex-direction:column;">
         <button id="sosButton" style="background:#ff1a1a; padding:18px; font-size:18px;">🔴 EMERGENCY SOS</button>
         <div style="display:flex; gap:10px;">
-          <button id="sendSOS" style="flex:1">Send SOS Manually</button>
-          <button id="voiceToggle" style="flex:1">🎙️ Voice: OFF</button>
+          <button id="sendSOS" class="btn btn-ghost small" style="flex:1">Send SOS Manually</button>
+          <button id="voiceToggle" class="btn btn-ghost small" style="flex:1">🎙️ Voice: OFF</button>
         </div>
         <div style="display:flex; gap:10px;">
-          <button id="simulatePower" style="flex:1">Simulate Power Press</button>
-          <button id="smsAll" style="flex:1">Send SMS to Contacts</button>
+          <button id="simulatePower" class="btn btn-ghost small" style="flex:1">Simulate Power Press</button>
+          <button id="smsAll" class="btn btn-ghost small" style="flex:1">Send SMS to Contacts</button>
         </div>
       </div>
       <div id="status">🔄 Initializing shake detection...</div>
+    </div>
+
+    <div class="card">
+      <h2>📞 Fake Call</h2>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button id="fakeCallBtn" class="btn btn-primary">📲 Simulate Incoming Call</button>
+      </div>
+      <div style="margin-top:10px; color:var(--muted); font-size:13px;">Use this to test call behavior without making a real call.</div>
     </div>
   </div>
 
@@ -274,6 +295,19 @@
       <div class="countdown-text">🚨 SOS ALERT IN</div>
       <div class="countdown-number" id="countdownNumber">3</div>
       <button class="btn-cancel" id="cancelSOS">CANCEL SOS</button>
+    </div>
+  </div>
+
+  <div class="call-modal" id="callModal">
+    <div class="call-card">
+      <div class="caller-name" id="callerName">Unknown</div>
+      <div class="caller-number" id="callerNumber">+0000000000</div>
+      <div style="margin:10px 0; color:var(--muted);">Incoming call</div>
+      <div class="call-actions">
+        <button id="declineCall" class="btn btn-ghost small" style="flex:1">Decline</button>
+        <button id="acceptCall" class="btn btn-success small" style="flex:1">Answer</button>
+      </div>
+      <div style="margin-top:12px; font-size:13px; color:var(--muted);" id="callStatus">Not answered</div>
     </div>
   </div>
 
@@ -986,6 +1020,35 @@
       document.getElementById('smsAll').addEventListener('click', () => {
         const smsBody = encodeURIComponent('🚨 EMERGENCY! Please respond.');
         contacts.forEach(c => { const phone = c.phone.replace(/[^0-9]/g,''); window.open(`sms:${phone}?body=${smsBody}`,'_blank'); });
+      });
+
+      // Fake call handling
+      const fakeCallBtn = document.getElementById('fakeCallBtn');
+      const callModal = document.getElementById('callModal');
+      const callerNameEl = document.getElementById('callerName');
+      const callerNumberEl = document.getElementById('callerNumber');
+      const callStatus = document.getElementById('callStatus');
+      document.getElementById('declineCall').addEventListener('click', () => {
+        callModal.classList.remove('active');
+        callStatus.textContent = 'Call declined';
+      });
+      document.getElementById('acceptCall').addEventListener('click', () => {
+        callStatus.textContent = 'Connected';
+        // show connected for a few seconds then close
+        setTimeout(() => { callModal.classList.remove('active'); callStatus.textContent = 'Not answered'; }, 5000);
+      });
+
+      fakeCallBtn.addEventListener('click', () => {
+        // choose a caller: first contact or prompt
+        let caller = contacts[0] || { name: 'Unknown', phone: '+0000000000' };
+        const custom = prompt('Enter caller name (leave blank to use first contact):', caller.name || '');
+        if (custom !== null && custom.trim() !== '') {
+          caller = { name: custom.trim(), phone: caller.phone || '+0000000000' };
+        }
+        callerNameEl.textContent = caller.name || 'Unknown';
+        callerNumberEl.textContent = caller.phone || '+0000000000';
+        callStatus.textContent = 'Ringing...';
+        callModal.classList.add('active');
       });
       document.getElementById("contactPhone").addEventListener("keypress", (e) => {
         if (e.key === "Enter") window.addContact();
