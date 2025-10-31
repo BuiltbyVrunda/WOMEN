@@ -4,20 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Emergency SOS + Recording System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
   <style>
     :root{
-      --bg-0: #0f1724;
-      --bg-1: #111827;
+      --bg-0: #0b1220;
+      --bg-1: #0f1724;
       --card: rgba(255,255,255,0.04);
-      --muted: rgba(255,255,255,0.6);
+      --muted: rgba(255,255,255,0.65);
       --accent: #ff6b6b;
+      --accent-2: #ff8a7a;
       --success: #51cf66;
       --glass: rgba(255,255,255,0.03);
       --glass-2: rgba(255,255,255,0.06);
+      --radius: 14px;
+      --card-padding: 18px;
+      --font-base: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      --font-heading: 'Poppins', var(--font-base);
     }
     * { box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: var(--font-base);
       background: radial-gradient(1000px 600px at 10% 10%, rgba(255,107,107,0.06), transparent), linear-gradient(135deg, var(--bg-0) 0%, var(--bg-1) 100%);
       color: #fff;
       min-height: 100vh;
@@ -34,20 +40,25 @@
     h1 {
       grid-column: 1 / -1;
       margin: 6px 0 18px 0;
-      color: var(--accent);
+      color: #fff;
+      font-family: var(--font-heading);
       font-size: 26px;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.2px;
       display:flex; align-items:center; gap:12px;
     }
+    h1 .brand-dot{ width:14px; height:14px; border-radius:50%; background:linear-gradient(180deg,var(--accent),var(--accent-2)); box-shadow:0 6px 18px rgba(255,90,90,0.14); }
+    h1 .brand-sub{ color:var(--muted); font-size:13px; margin-left:6px; font-weight:600; }
     .card {
-      background: linear-gradient(180deg, var(--glass), var(--glass-2));
-      border-radius: 14px;
-      padding: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius: var(--radius);
+      padding: var(--card-padding);
       margin-bottom: 12px;
-      backdrop-filter: blur(6px) saturate(120%);
-      border: 1px solid rgba(255,255,255,0.04);
-      box-shadow: 0 6px 18px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+      backdrop-filter: blur(8px) saturate(120%);
+      border: 1px solid rgba(255,255,255,0.03);
+      box-shadow: 0 12px 30px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.01);
+      transition: transform .18s ease, box-shadow .18s ease;
     }
+    .card:hover{ transform: translateY(-4px); box-shadow: 0 18px 48px rgba(2,6,23,0.7); }
     h2 {
       margin-bottom: 12px;
       font-size: 18px;
@@ -59,10 +70,10 @@
       width:100%; padding:12px 14px; border-radius:10px; border:0; cursor:pointer; font-weight:700;
       color:#fff;
     }
-    .btn:hover{ transform: translateY(-3px); }
+  .btn:hover{ transform: translateY(-3px); filter:brightness(1.02); }
     .btn-danger{ background: linear-gradient(90deg,#ff6b6b,#ff4d4d); }
     .btn-primary{ background: linear-gradient(90deg,#5b8cff,#3b6bff); }
-    .btn-success{ background: var(--success); color:#01220a; }
+  .btn-success{ background: var(--success); color:#01220a; box-shadow: 0 6px 18px rgba(81,207,102,0.12); }
     .btn-ghost{ background: transparent; border:1px solid rgba(255,255,255,0.06); }
     button:disabled{ opacity:0.6; cursor:not-allowed; transform:none; }
     .btn-success {
@@ -138,7 +149,7 @@
       max-height: 300px;
       object-fit: cover;
     }
-    .controls-row{ display:flex; gap:10px; }
+  .controls-row{ display:flex; gap:10px; }
     .small { padding:8px 10px; font-size:13px; }
     .recording-indicator {
       display: none;
@@ -205,6 +216,17 @@
       text-shadow: 0 0 40px rgba(255, 255, 255, 0.8);
       animation: numberPulse 1s infinite;
     }
+    /* SOS button */
+    .btn-sos{ padding:18px; font-size:18px; border-radius:14px; background: radial-gradient(circle at 30% 30%, rgba(255,120,120,0.12), transparent), linear-gradient(90deg,#ff6b6b,#ff4d4d); box-shadow: 0 12px 34px rgba(255,77,77,0.14); border: none; }
+    .btn-sos.pulse{ animation: pulse-sos 1.6s infinite; }
+    @keyframes pulse-sos { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+    /* decorative blobs */
+    body::before{ content:''; position:fixed; right:-120px; top:-60px; width:420px; height:420px; background: radial-gradient(circle at 30% 30%, rgba(88,107,255,0.12), transparent 40%); filter: blur(60px); z-index:0; pointer-events:none; }
+    body::after{ content:''; position:fixed; left:-120px; bottom:-80px; width:360px; height:360px; background: radial-gradient(circle at 30% 30%, rgba(255,106,106,0.08), transparent 40%); filter: blur(60px); z-index:0; pointer-events:none; }
+
+    /* responsive */
+    @media (max-width:880px){ .container{ grid-template-columns: 1fr; padding:12px; } h1{ font-size:20px; } .call-card{ width:92%; } }
     .countdown-text {
       font-size: 28px;
       margin-bottom: 40px;
@@ -268,7 +290,7 @@
     <div class="card">
       <h2>📱 Motion Detection & SOS</h2>
       <div style="display:flex; gap:10px; flex-direction:column;">
-        <button id="sosButton" style="background:#ff1a1a; padding:18px; font-size:18px;">🔴 EMERGENCY SOS</button>
+  <button id="sosButton" class="btn btn-sos pulse">🔴 EMERGENCY SOS</button>
         <div style="display:flex; gap:10px;">
           <button id="sendSOS" class="btn btn-ghost small" style="flex:1">Send SOS Manually</button>
           <button id="voiceToggle" class="btn btn-ghost small" style="flex:1">🎙️ Voice: OFF</button>
