@@ -392,14 +392,14 @@
     function initConversationAudio() {
       if (!conversationAudio) {
         try {
-          // Prefer a dedicated conversation audio file placed in the repo
+          // Load the conversation audio file
           const fname = 'othermainaudio.mp3';
           const src = encodeURI(fname);
           conversationAudio = new Audio();
           conversationAudio.src = src;
           conversationAudio.preload = 'auto';
           conversationAudio.loop = true;
-          conversationAudio.volume = 0.6; // background level
+          // Volume will be set by audio mode
 
           // Attach basic error logging
           conversationAudio.addEventListener('error', (ev) => {
@@ -1356,36 +1356,11 @@
       const callerNumberEl = document.getElementById('callerNumber');
       const callStatus = document.getElementById('callStatus');
       
-      // Add call mode selection buttons
+      // Create call mode selection UI (will be added after call is picked up)
       const callModesDiv = document.createElement('div');
       callModesDiv.className = 'btn-group';
-      callModesDiv.style.marginLeft = '8px';
-      
-      // Create buttons for each mode
-      Object.entries(AUDIO_MODES).forEach(([mode, config]) => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-secondary';
-        btn.innerHTML = `${config.icon} ${config.name}`;
-        btn.style.marginLeft = '4px';
-        btn.onclick = () => {
-          // Update UI
-          callModesDiv.querySelectorAll('button').forEach(b => {
-            b.style.background = '';
-            b.classList.remove('active');
-          });
-          btn.style.background = '#dc3545';
-          btn.classList.add('active');
-          
-          // Set audio mode
-          currentAudioMode = config;
-          if (conversationAudio) {
-            conversationAudio.volume = config.volume;
-          }
-        };
-        callModesDiv.appendChild(btn);
-      });
-      
-      document.getElementById('callActions').appendChild(callModesDiv);
+      callModesDiv.style.margin = '10px 0';
+      callModesDiv.style.display = 'none'; // Hide initially
       function endCall() {
         callModal.classList.remove('active');
         document.getElementById('conversationUI').style.display = 'none';
@@ -1508,12 +1483,49 @@
         document.getElementById('callActions').style.display = 'none';
         document.getElementById('conversationUI').style.display = 'block';
         stopRingtone();
+
+        // Show audio mode selection
+        callModesDiv.innerHTML = ''; // Clear previous buttons
+        callModesDiv.style.display = 'flex';
+        document.getElementById('conversationUI').insertBefore(callModesDiv, document.getElementById('conversationMessages'));
         
-        // Start playing conversation audio in current mode
-        conversationAudio.currentTime = 0;
-        conversationAudio.volume = currentAudioMode.volume;
-        safePlayAudio(conversationAudio).then(ok => {
-          if (!ok) console.warn('Conversation audio failed to play');
+        // Add mode buttons
+        Object.entries(AUDIO_MODES).forEach(([mode, config]) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-secondary';
+          btn.innerHTML = `${config.icon} ${config.name}`;
+          btn.style.marginRight = '4px';
+          btn.onclick = () => {
+            // Update UI
+            callModesDiv.querySelectorAll('button').forEach(b => {
+              b.style.background = '';
+              b.classList.remove('active');
+            });
+            btn.style.background = '#dc3545';
+            btn.classList.add('active');
+            
+            // Set audio mode and volume
+            currentAudioMode = config;
+            if (conversationAudio) {
+              conversationAudio.volume = config.volume;
+            }
+          };
+          if (mode === 'EAR') {
+            btn.click(); // Auto-select ear mode
+          }
+          callModesDiv.appendChild(btn);
+        });
+        
+        // Initialize and play conversation audio
+        initConversationAudio();
+        if (conversationAudio) {
+          conversationAudio.currentTime = 0;
+          conversationAudio.volume = currentAudioMode.volume;
+          const played = await safePlayAudio(conversationAudio);
+          if (!played) {
+            console.warn('Conversation audio failed to play');
+            callStatus.textContent = 'Audio failed - check volume';
+          }
         });
 
         // Start call timer
