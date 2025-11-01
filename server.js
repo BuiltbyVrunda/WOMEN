@@ -42,6 +42,7 @@ app.use(express.static(__dirname));
 app.use("/uploads", express.static(uploadsDir));
 
 const sosFile = path.join(logsDir, "sos_log.json");
+const routeFeedbackFile = path.join(logsDir, "route_feedback_log.json");
 const shakeIntensityFile = path.join(logsDir, "shake_intensity_log.json");
 const recordingsFile = path.join(logsDir, "recordings_log.json");
 const liveLocationsFile = path.join(logsDir, "live_locations_log.json");
@@ -198,6 +199,31 @@ app.post("/upload-recording", upload.single("recording"), (req, res) => {
   } catch (err) {
     console.error("Error uploading recording:", err);
     res.status(500).json({ error: "Failed to upload recording" });
+  }
+});
+
+// Endpoint to receive route feedback
+app.post("/route-feedback", (req, res) => {
+  try {
+    const feedback = {
+      ...req.body,
+      timestamp: new Date().toISOString(),
+      ip: req.ip // Store IP to prevent spam and track location patterns
+    };
+
+    saveData(routeFeedbackFile, feedback);
+    console.log("📝 Route feedback received:", feedback.route_from, "to", feedback.route_to);
+
+    res.json({ 
+      status: "Feedback submitted successfully",
+      message: "Thank you for helping make routes safer!"
+    });
+  } catch (err) {
+    console.error("Error saving route feedback:", err);
+    res.status(500).json({ error: "Failed to save feedback" });
+  }
+});
+```
   }
 });
 
