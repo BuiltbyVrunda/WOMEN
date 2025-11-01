@@ -1413,6 +1413,28 @@
       const callerNameEl = document.getElementById('callerName');
       const callerNumberEl = document.getElementById('callerNumber');
       const callStatus = document.getElementById('callStatus');
+      
+      // Add speaker mode toggle button to call UI
+      const speakerBtn = document.createElement('button');
+      speakerBtn.id = 'speakerToggle';
+      speakerBtn.className = 'btn btn-secondary';
+      speakerBtn.innerHTML = '🔈 Speaker: Off';
+      speakerBtn.style.marginLeft = '8px';
+      document.getElementById('callActions').appendChild(speakerBtn);
+      
+      // Speaker mode state and handler
+      let speakerMode = false;
+      function toggleSpeaker() {
+        speakerMode = !speakerMode;
+        speakerBtn.innerHTML = speakerMode ? '📢 Speaker: On' : '🔈 Speaker: Off';
+        // Set volumes based on speaker mode
+        if (conversationAudio) {
+          conversationAudio.volume = speakerMode ? 1.0 : 0.6;
+        }
+        // Update button style
+        speakerBtn.style.background = speakerMode ? '#dc3545' : '';
+      }
+      speakerBtn.onclick = toggleSpeaker;
       function endCall() {
         callModal.classList.remove('active');
         document.getElementById('conversationUI').style.display = 'none';
@@ -1422,7 +1444,10 @@
         document.getElementById('typingIndicator').style.display = 'none';
         document.getElementById('callDuration').textContent = '';
         stopRingtone();
-        stopVoiceSounds();
+        // Reset speaker mode
+        speakerMode = false;
+        speakerBtn.innerHTML = '🔈 Speaker: Off';
+        speakerBtn.style.background = '';
         
         // Stop conversation audio if playing and disconnect from AudioContext
         if (conversationAudio) {
@@ -1563,8 +1588,6 @@
           // Show typing indicator
           setTimeout(() => {
             typingIndicator.style.display = 'inline';
-            // Play voice-like sound
-            playVoiceSound(800, 0.8 + Math.random() * 0.4);
           }, msg.delay - 1000);
 
           // Show message
