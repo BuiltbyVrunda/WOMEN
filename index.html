@@ -379,13 +379,10 @@
     let audioCtx = null;
     let ringtoneAudio = null;
     let conversationAudio = null;
-  let conversationSource = null;
-    let voiceNodes = [];
+    let conversationSource = null;
     let conversationTimer = null;
     let callTimer = null;
-    let callStartTime = null;
-
-    // Initialize or get audio context
+    let callStartTime = null;    // Initialize or get audio context
     function getAudioContext() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       return audioCtx;
@@ -477,7 +474,7 @@
       SPEAKER: { name: 'Speaker', icon: '📢', volume: 1.0 }
     };
     let currentAudioMode = AUDIO_MODES.EAR; // default to ear mode
-    }
+    
 
     function playRingtone(duration = 30000) { // 30s default duration
       try {
@@ -1559,9 +1556,6 @@
             msgEl.textContent = msg.text;
             messagesDiv.appendChild(msgEl);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            
-            // Play slightly longer voice sound for message
-            playVoiceSound(1200, 0.8 + Math.random() * 0.4);
           }, msg.delay);
         });
       });
