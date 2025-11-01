@@ -677,30 +677,44 @@
           console.log("⏹️ Auto-stopped recording");
         }, SOS_SETTINGS.recordingDuration);
       }
-      // Prefer live last-known location from the watcher (more 'live')
-      let location = { latitude: "Unknown", longitude: "Unknown" };
-      if (lastKnownLocation && lastKnownLocation.latitude) {
-        location = { latitude: lastKnownLocation.latitude, longitude: lastKnownLocation.longitude };
-      } else {
-        try {
-          const pos = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true, timeout: 5000, maximumAge: 0
-            });
-          });
-          location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-        } catch (err) {
-          console.warn("⚠️ Location not available:", err.message);
+        // Get accurate location with better error handling and retries
+      let location = await getBestLocation();
+      
+      // If initial location fails, start a watch to get it ASAP
+      if (location.latitude === "Unknown") {
+        startLiveLocationWatch();
+        // Wait briefly to see if we get a location
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (lastKnownLocation && lastKnownLocation.latitude) {
+          location = {
+            latitude: lastKnownLocation.latitude,
+            longitude: lastKnownLocation.longitude,
+            accuracy: lastKnownLocation.accuracy,
+            timestamp: lastKnownLocation.timestamp
+          };
         }
       }
 
       const time = new Date().toLocaleString();
-      const mapsLink = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+      let locationText = "";
+      
+      if (location.latitude !== "Unknown") {
+        const mapsLink = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+        locationText = `📍 *Live Location*: ${mapsLink}\n`;
+        if (location.accuracy) {
+          locationText += `📡 Accuracy: ${location.accuracy}m\n`;
+        }
+        if (location.timestamp) {
+          locationText += `⏱️ Location Time: ${new Date(location.timestamp).toLocaleTimeString()}\n`;
+        }
+      } else {
+        locationText = "📍 Location: Not available yet\n";
+      }
       
       let message = `🚨 *EMERGENCY SOS ALERT*\n\n`;
       message += `👤 Name: ${userProfile.name || "Unknown"}\n`;
       message += `📅 Time: ${time}\n`;
-      message += `📍 Location: ${mapsLink}\n`;
+      message += locationText;
       if (shakeIntensity) message += `⚠️ Shake Intensity: ${shakeIntensity.toFixed(2)}\n`;
       if (userProfile.bloodType) message += `🩸 Blood Type: ${userProfile.bloodType}\n`;
       if (userProfile.medicalInfo) message += `💊 Medical Info: ${userProfile.medicalInfo}\n`;
@@ -902,6 +916,49 @@
       } catch (e) {}
     }
 
+    // Get the most accurate location possible
+    async function getBestLocation(maxWait = 10000) {
+      const defaultLocation = { latitude: "Unknown", longitude: "Unknown" };
+      
+      try {
+        // Try high accuracy first with a short timeout
+        const highAccuracy = await Promise.race([
+          new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+              pos => resolve({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: Math.round(pos.coords.accuracy),
+                timestamp: new Date().toISOString()
+              }),
+              reject,
+              { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ]).catch(async () => {
+          // If high accuracy fails/times out, try again with lower accuracy
+          return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+              pos => resolve({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: Math.round(pos.coords.accuracy),
+                timestamp: new Date().toISOString()
+              }),
+              reject,
+              { enableHighAccuracy: false, timeout: maxWait - 5000, maximumAge: 60000 }
+            );
+          });
+        });
+
+        return highAccuracy || defaultLocation;
+      } catch (error) {
+        console.warn('Location error:', error);
+        return defaultLocation;
+      }
+    }
+
     // Live location watch (keeps lastKnownLocation up to date and posts to server frequently)
     let liveWatchId = null;
     function startLiveLocationWatch(sosId) {
@@ -942,17 +999,33 @@
         // Send WhatsApp + SMS + optional dial via existing sendWhatsAppSOS
         try { await sendWhatsAppSOS(shakeIntensity); } catch(e) { console.warn(e); }
 
-        // Send SMS via sms: links (opens native SMS app for user confirmation)
-        try {
-          const smsText = encodeURIComponent(`EMERGENCY! My location: https://www.google.com/maps?q=Unknown`);
+      // Get location and send SMS to all contacts
+      try {
+          const locationMessage = location.latitude !== "Unknown" 
+            ? `🚨 EMERGENCY!\n📍 My location: https://www.google.com/maps?q=${location.latitude},${location.longitude}\n⚡ Accuracy: ${location.accuracy || 'Unknown'}m\n`
+            : `🚨 EMERGENCY! Location not available.`;
+          
+          const smsText = encodeURIComponent(locationMessage + `\n\n${userProfile.name || 'Someone'} needs immediate help!`);
+          
           contacts.forEach((c) => {
             const phone = c.phone.replace(/[^0-9]/g, '');
-            const smsUrl = `sms:${phone}?body=${smsText}`;
-            window.open(smsUrl, '_blank');
+            // Use different formats for different platforms
+            const iosSmsUrl = `sms:${phone}&body=${smsText}`; // iOS format
+            const androidSmsUrl = `sms:${phone}?body=${smsText}`; // Android format
+            
+            try {
+              window.open(androidSmsUrl, '_blank');
+            } catch (err) {
+              try {
+                window.open(iosSmsUrl, '_blank'); // Fallback to iOS format
+              } catch (e2) {
+                console.warn('SMS open failed for', phone, e2);
+              }
+            }
           });
-        } catch (e) {}
-
-        // Optionally auto-dial (opens phone dialer)
+        } catch (e) {
+          console.error('SMS sending failed:', e);
+        }        // Optionally auto-dial (opens phone dialer)
         if (options.autoDial && contacts[0]) {
           try { window.open(`tel:${contacts[0].phone.replace(/[^0-9]/g,'')}`,'_self'); } catch(e){}
         }
