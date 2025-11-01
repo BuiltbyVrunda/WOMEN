@@ -455,10 +455,21 @@
     // Create ringtone audio element
     function initRingtone() {
       if (!ringtoneAudio) {
-        ringtoneAudio = new Audio('WhatsApp Audio 2025-10-31 at 22.34.51_4005dd8f.mp3');
+        const fname = 'WhatsApp Audio 2025-10-31 at 22.34.51_4005dd8f.mp3';
+        ringtoneAudio = new Audio(encodeURI(fname));
         ringtoneAudio.loop = true;
+        ringtoneAudio.volume = 1.0; // full volume for ringtone
+        ringtoneAudio.preload = 'auto';
       }
     }
+
+    // Initialize both audio elements early to handle preload
+    function initAudio() {
+      initRingtone();
+      initConversationAudio();
+    }
+    // Call initAudio on page load
+    initAudio();
 
     // Synthesize voice-like sounds
     function playVoiceSound(duration = 800, pitch = 1) {
@@ -525,12 +536,13 @@
 
     function playRingtone(duration = 30000) { // 30s default duration
       try {
-        initRingtone();
         stopRingtone(); // stop any existing playback
         
         // Start playing the audio file
         ringtoneAudio.currentTime = 0;
-        ringtoneAudio.play();
+        safePlayAudio(ringtoneAudio).then(ok => {
+          if (!ok) console.warn('Ringtone failed to play');
+        });
 
         // Stop after duration if provided
         if (duration) {
@@ -1519,7 +1531,6 @@
         stopRingtone();
         
         // Start playing conversation audio (use safePlay to handle autoplay policies)
-        initConversationAudio();
         conversationAudio.currentTime = 0;
         safePlayAudio(conversationAudio).then(ok => {
           if (!ok) console.warn('Conversation audio failed to play');
