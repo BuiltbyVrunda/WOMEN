@@ -382,44 +382,58 @@
     let conversationSource = null;
     let conversationTimer = null;
     let callTimer = null;
-    let callStartTime = null;    // Initialize or get audio context
+    let callStartTime = null;
+    let audioInitialized = false;    // Track if audio was successfully initialized
     function getAudioContext() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       return audioCtx;
     }
 
     // Initialize conversation audio with safer loading (handles spaces/encoding and preloading)
-    function initConversationAudio() {
-      if (!conversationAudio) {
-        try {
-          // Load the conversation audio file
-          const fname = 'othermainaudio.mp3';
-          const src = encodeURI(fname);
-          conversationAudio = new Audio();
-          conversationAudio.src = src;
-          conversationAudio.preload = 'auto';
-          conversationAudio.loop = true;
-          // Volume will be set by audio mode
-
-          // Attach basic error logging
-          conversationAudio.addEventListener('error', (ev) => {
-            console.warn('Conversation audio load error', ev);
-          });
-          // Connect the audio element to the AudioContext destination to ensure playback routing
-          try {
-            const ctx = getAudioContext();
-            // If createMediaElementSource throws because the element is already connected elsewhere, ignore
-            if (!conversationSource) {
-              conversationSource = ctx.createMediaElementSource(conversationAudio);
-              conversationSource.connect(ctx.destination);
-            }
-          } catch (e) {
-            // Not critical; playback may still work via element's own sink
-            console.warn('Could not attach conversation audio to AudioContext:', e);
-          }
-        } catch (e) {
-          console.warn('Could not initialize conversation audio:', e);
+    async function initConversationAudio() {
+      try {
+        // Create new audio context and elements each time to ensure clean state
+        if (conversationSource) {
+          try { conversationSource.disconnect(); } catch(e) {}
+          conversationSource = null;
         }
+        if (conversationAudio) {
+          try { 
+            conversationAudio.pause(); 
+            conversationAudio.src = ''; 
+          } catch(e) {}
+        }
+
+        // Load the conversation audio file
+        const fname = 'othermainaudio.mp3';
+        const src = encodeURI(fname);
+        conversationAudio = new Audio();
+        
+        // Wait for audio to be loaded before proceeding
+        await new Promise((resolve, reject) => {
+          conversationAudio.addEventListener('canplaythrough', () => resolve(), { once: true });
+          conversationAudio.addEventListener('error', (e) => reject(e), { once: true });
+          conversationAudio.src = src;
+          conversationAudio.load(); // Explicitly load the audio
+        });
+
+        conversationAudio.loop = true;
+        // Volume will be set by audio mode
+
+        // Connect to audio context for better playback control
+        const ctx = getAudioContext();
+        await ctx.resume(); // Ensure context is running
+        
+        conversationSource = ctx.createMediaElementSource(conversationAudio);
+        conversationSource.connect(ctx.destination);
+        
+        audioInitialized = true;
+        console.log('Conversation audio initialized successfully');
+        return true;
+      } catch (e) {
+        console.warn('Could not initialize conversation audio:', e);
+        audioInitialized = false;
+        return false;
       }
     }
 
@@ -1517,12 +1531,18 @@
         });
         
         // Initialize and play conversation audio
-        initConversationAudio();
-        if (conversationAudio) {
+        callStatus.textContent = 'Initializing audio...';
+        const initialized = await initConversationAudio();
+        
+        if (initialized && conversationAudio) {
+          callStatus.textContent = 'Connected - Starting audio...';
           conversationAudio.currentTime = 0;
           conversationAudio.volume = currentAudioMode.volume;
           const played = await safePlayAudio(conversationAudio);
-          if (!played) {
+          
+          if (played) {
+            callStatus.textContent = 'Connected';
+          } else {
             console.warn('Conversation audio failed to play');
             callStatus.textContent = 'Audio failed - check volume';
           }
