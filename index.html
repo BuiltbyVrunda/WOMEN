@@ -392,6 +392,9 @@
     // Initialize conversation audio with safer loading (handles spaces/encoding and preloading)
     async function initConversationAudio() {
       try {
+        // Debug message
+        console.log('Starting conversation audio initialization...');
+        
         // Create new audio context and elements each time to ensure clean state
         if (conversationSource) {
           try { conversationSource.disconnect(); } catch(e) {}
@@ -404,17 +407,26 @@
           } catch(e) {}
         }
 
-        // Load the conversation audio file
-        const fname = 'othermainaudio.mp3';
+        // Load the conversation audio file with full path for debugging
+        const fname = 'WhatsApp Audio 2025-10-31 at 22.34.51_4005dd8f.mp3'; // Use the WhatsApp audio for now
+        console.log('Loading audio file:', fname);
         const src = encodeURI(fname);
         conversationAudio = new Audio();
         
         // Wait for audio to be loaded before proceeding
         await new Promise((resolve, reject) => {
-          conversationAudio.addEventListener('canplaythrough', () => resolve(), { once: true });
-          conversationAudio.addEventListener('error', (e) => reject(e), { once: true });
+          conversationAudio.addEventListener('canplaythrough', () => {
+            console.log('Audio file loaded and ready to play');
+            resolve();
+          }, { once: true });
+          conversationAudio.addEventListener('error', (e) => {
+            console.error('Audio file load error:', e);
+            reject(e);
+          }, { once: true });
+          console.log('Setting audio source:', src);
           conversationAudio.src = src;
           conversationAudio.load(); // Explicitly load the audio
+          console.log('Audio load initiated');
         });
 
         conversationAudio.loop = true;
@@ -484,7 +496,7 @@
 
     // Audio mode constants
     const AUDIO_MODES = {
-      EAR: { name: 'Ear', icon: '🎧', volume: 0.4 },
+      EAR: { name: 'Ear', icon: '🎧', volume: 0.7 },
       SPEAKER: { name: 'Speaker', icon: '📢', volume: 1.0 }
     };
     let currentAudioMode = AUDIO_MODES.EAR; // default to ear mode
@@ -1538,10 +1550,26 @@
           callStatus.textContent = 'Connected - Starting audio...';
           conversationAudio.currentTime = 0;
           conversationAudio.volume = currentAudioMode.volume;
+          
+          // Add a debug element to show audio state
+          const debugDiv = document.createElement('div');
+          debugDiv.style.fontSize = '12px';
+          debugDiv.style.color = '#666';
+          debugDiv.style.marginTop = '5px';
+          document.getElementById('conversationUI').insertBefore(debugDiv, document.getElementById('conversationMessages'));
+          
+          // Update debug info
+          const updateDebug = () => {
+            debugDiv.textContent = `Audio State: ${conversationAudio.readyState}, Volume: ${conversationAudio.volume}, Time: ${conversationAudio.currentTime.toFixed(1)}s`;
+          };
+          setInterval(updateDebug, 1000);
+          
           const played = await safePlayAudio(conversationAudio);
+          console.log('Audio play attempt result:', played);
           
           if (played) {
             callStatus.textContent = 'Connected';
+            updateDebug();
           } else {
             console.warn('Conversation audio failed to play');
             callStatus.textContent = 'Audio failed - check volume';
